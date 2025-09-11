@@ -124,10 +124,10 @@ WSGI_APPLICATION = 'kipenzi.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'levelsprotechorg$default',
-        'USER': 'levelsprotechorg',
+        'NAME': 'geoclimatz$default',
+        'USER': 'geoclimatz',
         'PASSWORD': 'salumroot', 
-        'HOST': 'levelsprotechorg.mysql.pythonanywhere-services.com',
+        'HOST': 'geoclimatz.mysql.pythonanywhere-services.com',
         'PORT': '3306',
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
