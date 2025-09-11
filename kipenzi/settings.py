@@ -18,7 +18,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-uwf!$!@qgcx2pol!ycfy(_k8i1!5)txkht2ky%l^()np$su9f^'
 DEBUG = True
-ALLOWED_HOSTS = ['levelsprotechorg.pythonanywhere.com', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['geoclimatz.pythonanywhere.com', '127.0.0.1', 'localhost']
 
 # PROC CODE START ---------------------------------------------------------------------
 
