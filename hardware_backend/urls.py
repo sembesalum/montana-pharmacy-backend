@@ -77,6 +77,7 @@ urlpatterns = [
     path('orders/<str:order_id>/details/', views.get_order_details_new_format, name='get_order_details_new_format'),
     path('orders/<str:order_id>/update-status/', views.update_order_status, name='update_order_status'),
     path('orders/<str:order_id>/cancel/', views.cancel_order, name='cancel_order'),
+    path('orders/<str:order_id>/delete/', views.delete_order, name='delete_order'),
     
     # Admin Order Management APIs
     path('admin/orders/', views.admin_get_all_orders, name='admin_get_all_orders'),

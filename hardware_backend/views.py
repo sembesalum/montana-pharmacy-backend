@@ -1834,6 +1834,59 @@ def cancel_order(request, order_id):
             'message': f'Failed to cancel order: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_order(request, order_id):
+    """Delete an order permanently"""
+    try:
+        # Get order
+        try:
+            order = Order.objects.get(order_id=order_id)
+        except Order.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order can be deleted
+        if order.status in ['delivered', 'shipped']:
+            return Response({
+                'success': False,
+                'message': f'Order cannot be deleted in {order.status} status. Only pending, confirmed, processing, or cancelled orders can be deleted.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Store order details for response
+        order_data = {
+            'order_id': order.order_id,
+            'order_number': order.order_number,
+            'user_id': order.user.user_id,
+            'business_name': order.user.business_name,
+            'total_amount': float(order.total_amount),
+            'status': order.status,
+            'created_at': order.created_at.isoformat() + 'Z'
+        }
+        
+        # Restore product stock before deletion
+        for item in order.order_items.all():
+            product = item.product
+            product.stock_quantity += item.quantity
+            product.save()
+        
+        # Delete the order (this will also delete order items due to CASCADE)
+        order.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Order deleted successfully',
+            'deleted_order': order_data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to delete order: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # Admin Order Management Views
 @api_view(['GET'])
 @permission_classes([AllowAny])
