@@ -21,7 +21,7 @@ from .serializers import (
     BrandSerializer, ProductTypeSerializer, ProductSerializer,
     BannerSerializer, HomePageSerializer, ProductsPageSerializer,
     ProductTypeWithProductsSerializer, OrderSerializer, CreateOrderSerializer,
-    OrderItemSerializer
+    OrderItemSerializer, OrderResponseSerializer, OrderItemResponseSerializer
 )
 
 def generate_otp():
@@ -1633,11 +1633,21 @@ def create_order(request):
         serializer = CreateOrderSerializer(data=request.data, context={'request': mock_request})
         if serializer.is_valid():
             order = serializer.save()
-            return Response({
+            # Generate order number
+            order_number = order.generate_order_number()
+            
+            # Prepare response data
+            response_data = {
                 'success': True,
                 'message': 'Order created successfully',
-                'data': OrderSerializer(order).data
-            }, status=status.HTTP_201_CREATED)
+                'order_id': order.order_id,
+                'order_number': order_number,
+                'total_amount': float(order.total_amount),
+                'order_status': order.status.upper(),
+                'created_at': order.created_at.isoformat() + 'Z'
+            }
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
         else:
             return Response({
                 'success': False,
@@ -1648,6 +1658,34 @@ def create_order(request):
         return Response({
             'success': False,
             'message': f'Failed to create order: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_order_details_new_format(request, order_id):
+    """Get order details in new format"""
+    try:
+        # Get order
+        try:
+            order = Order.objects.get(order_id=order_id)
+        except Order.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Serialize order in new format
+        order_serializer = OrderResponseSerializer(order)
+        
+        return Response({
+            'success': True,
+            'data': order_serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to get order details: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])

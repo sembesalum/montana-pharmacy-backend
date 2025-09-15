@@ -71,9 +71,10 @@ urlpatterns = [
     path('admin/users/<str:user_id>/delete/', views.admin_delete_user, name='admin_delete_user'),
     
     # Order Management APIs
-    path('orders/create/', views.create_order, name='create_order'),
+    path('orders/', views.create_order, name='create_order'),
     path('orders/user/<str:user_id>/', views.get_user_orders, name='get_user_orders'),
     path('orders/<str:order_id>/', views.get_order_details, name='get_order_details'),
+    path('orders/<str:order_id>/details/', views.get_order_details_new_format, name='get_order_details_new_format'),
     path('orders/<str:order_id>/update-status/', views.update_order_status, name='update_order_status'),
     path('orders/<str:order_id>/cancel/', views.cancel_order, name='cancel_order'),
     

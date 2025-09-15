@@ -165,6 +165,21 @@ class OrderItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['order_item_id', 'total_price', 'created_at']
 
+class OrderItemResponseSerializer(serializers.ModelSerializer):
+    """Serializer for order items in response"""
+    
+    class Meta:
+        model = OrderItem
+        fields = [
+            'product_id', 'product_name', 'product_image', 'category',
+            'unit_price', 'quantity', 'pack_type', 'total_price'
+        ]
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['product_id'] = instance.product.product_id
+        return data
+
 class OrderSerializer(serializers.ModelSerializer):
     """Serializer for orders"""
     user = BusinessUserSerializer(read_only=True)
@@ -183,6 +198,24 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['order_id', 'total_amount', 'subtotal', 'tax_amount', 
                            'shipping_amount', 'created_at', 'updated_at']
 
+class OrderResponseSerializer(serializers.ModelSerializer):
+    """Serializer for order response with new format"""
+    items = OrderItemResponseSerializer(source='order_items', many=True, read_only=True)
+    user_id = serializers.CharField(source='user.user_id', read_only=True)
+    business_name = serializers.CharField(source='user.business_name', read_only=True)
+    business_phone = serializers.CharField(source='user.phone_number', read_only=True)
+    business_location = serializers.CharField(source='user.business_location', read_only=True)
+    order_status = serializers.CharField(source='status', read_only=True)
+    
+    class Meta:
+        model = Order
+        fields = [
+            'user_id', 'business_name', 'business_phone', 'business_location',
+            'delivery_address', 'delivery_phone', 'delivery_notes',
+            'payment_method', 'payment_timing', 'total_amount', 'partial_amount',
+            'mobile_money_number', 'items'
+        ]
+
 class CreateOrderSerializer(serializers.ModelSerializer):
     """Serializer for creating orders"""
     order_items = serializers.ListField(
@@ -194,7 +227,8 @@ class CreateOrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'delivery_address', 'delivery_phone', 'delivery_notes',
-            'payment_method', 'order_items'
+            'payment_method', 'payment_timing', 'partial_amount',
+            'mobile_money_number', 'order_items'
         ]
     
     def validate_order_items(self, value):
@@ -246,7 +280,9 @@ class CreateOrderSerializer(serializers.ModelSerializer):
                     unit_price=product.price,
                     product_name=product.name,
                     product_description=product.description,
-                    product_image=product.image
+                    product_image=product.image,
+                    category=product.product_type.name,
+                    pack_type=item_data.get('pack_type', 'Piece')
                 )
                 
                 # Update product stock

@@ -186,8 +186,25 @@ class Order(models.Model):
     tracking_number = models.CharField(max_length=100, blank=True, null=True)
     
     # Payment information
-    payment_method = models.CharField(max_length=50, default='cash_on_delivery')
+    PAYMENT_METHOD_CHOICES = [
+        ('cash_on_delivery', 'Cash on Delivery'),
+        ('mobile_money', 'Mobile Money'),
+        ('bank_transfer', 'Bank Transfer'),
+    ]
+    
+    PAYMENT_TIMING_CHOICES = [
+        ('pay_now', 'Pay Now'),
+        ('pay_on_delivery', 'Pay on Delivery'),
+    ]
+    
+    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, default='cash_on_delivery')
+    payment_timing = models.CharField(max_length=20, choices=PAYMENT_TIMING_CHOICES, default='pay_on_delivery')
     payment_status = models.CharField(max_length=20, default='pending')
+    partial_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    mobile_money_number = models.CharField(max_length=15, blank=True, null=True)
+    
+    # Order number for display
+    order_number = models.CharField(max_length=20, blank=True, null=True)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -199,6 +216,18 @@ class Order(models.Model):
     
     def __str__(self):
         return f"Order {self.order_id} - {self.user.business_name}"
+    
+    def generate_order_number(self):
+        """Generate a human-readable order number"""
+        if not self.order_number:
+            # Format: ORD-YYYYMMDD-XXXX (e.g., ORD-20240101-0001)
+            from datetime import datetime
+            date_str = datetime.now().strftime('%Y%m%d')
+            # Get the count of orders for today
+            today_orders = Order.objects.filter(created_at__date=datetime.now().date()).count()
+            self.order_number = f"ORD-{date_str}-{today_orders + 1:04d}"
+            self.save()
+        return self.order_number
     
     def calculate_totals(self):
         """Calculate order totals from order items"""
@@ -232,6 +261,13 @@ class OrderItem(models.Model):
     product_name = models.CharField(max_length=200)
     product_description = models.TextField()
     product_image = models.CharField(max_length=500, blank=True, null=True)
+    category = models.CharField(max_length=100, blank=True, null=True)
+    
+    PACK_TYPE_CHOICES = [
+        ('Piece', 'Piece'),
+        ('Dozen', 'Dozen'),
+    ]
+    pack_type = models.CharField(max_length=10, choices=PACK_TYPE_CHOICES, default='Piece')
     
     created_at = models.DateTimeField(auto_now_add=True)
     
