@@ -125,12 +125,22 @@ def login_business_user(request):
                     'needs_verification': True
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Return user data
+            # Generate a simple token for authentication
+            # In production, use JWT tokens
+            import hashlib
+            import time
+            token_data = f"{user.user_id}:{user.phone_number}:{int(time.time())}"
+            token = hashlib.sha256(token_data.encode()).hexdigest()
+            
+            # Return user data with token in the expected format
             user_serializer = BusinessUserSerializer(user)
             return Response({
                 'success': True,
                 'message': 'Login successful',
-                'user': user_serializer.data
+                'data': {
+                    'user': user_serializer.data,
+                    'token': token
+                }
             }, status=status.HTTP_200_OK)
         else:
             return Response({
@@ -194,12 +204,21 @@ def verify_otp(request):
                 user.is_verified = True
                 user.save()
                 
-                # Return user details
+                # Generate a simple token for authentication
+                import hashlib
+                import time
+                token_data = f"{user.user_id}:{user.phone_number}:{int(time.time())}"
+                token = hashlib.sha256(token_data.encode()).hexdigest()
+                
+                # Return user details with token in the expected format
                 user_serializer = BusinessUserSerializer(user)
                 return Response({
                     'success': True,
                     'message': 'Phone number verified successfully',
-                    'user': user_serializer.data
+                    'data': {
+                        'user': user_serializer.data,
+                        'token': token
+                    }
                 }, status=status.HTTP_200_OK)
             except BusinessUser.DoesNotExist:
                 return Response({
@@ -607,9 +626,17 @@ def admin_get_all_products(request):
 def admin_create_product(request):
     """Admin: Create a new product"""
     try:
+        # Handle both JSON and FormData requests
+        if request.content_type and 'application/json' in request.content_type:
+            data = request.data.copy()
+        else:
+            # Handle FormData - extract data from POST
+            data = {}
+            for key, value in request.POST.items():
+                data[key] = value
+        
         # Handle image upload if provided
         image_file = request.FILES.get('image')
-        data = request.data.copy()
         
         # Remove image field from data if no file is uploaded
         if 'image' in data and not image_file:
@@ -625,15 +652,51 @@ def admin_create_product(request):
                     'message': 'Failed to upload image'
                 }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Convert names to IDs for foreign key fields
+        if 'category' in data and data['category']:
+            try:
+                category = ProductCategory.objects.get(name=data['category'])
+                data['category'] = category.category_id
+            except ProductCategory.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Category "{data["category"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if 'brand' in data and data['brand']:
+            try:
+                brand = Brand.objects.get(name=data['brand'])
+                data['brand'] = brand.brand_id
+            except Brand.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Brand "{data["brand"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if 'product_type' in data and data['product_type']:
+            try:
+                product_type = ProductType.objects.get(name=data['product_type'])
+                data['product_type'] = product_type.type_id
+            except ProductType.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Product type "{data["product_type"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"🔍 DEBUG: Final data before serializer: {data}")
+        print(f"🔍 DEBUG: Data types: {[(k, type(v).__name__) for k, v in data.items()]}")
+        
         serializer = ProductSerializer(data=data)
         if serializer.is_valid():
             product = serializer.save()
+            print(f"🔍 DEBUG: Product created successfully: {product.product_id}")
             return Response({
                 'success': True,
                 'message': 'Product created successfully',
                 'data': ProductSerializer(product).data
             }, status=status.HTTP_201_CREATED)
         else:
+            print(f"🔍 DEBUG: Validation failed: {serializer.errors}")
             return Response({
                 'success': False,
                 'message': 'Validation error',
