@@ -1,0 +1,18 @@
+# Development Dependencies
+# Include production requirements
+-r requirements.txt
+
+# Development Tools
+pytest==7.4.3
+pytest-django==4.7.0
+coverage==7.3.2
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
+
+# Debug Tools
+django-debug-toolbar==4.2.0
+django-extensions==3.2.3
+
+# API Documentation
+drf-spectacular==0.26.5

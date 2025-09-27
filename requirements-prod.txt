@@ -1,3 +1,4 @@
+# Production Dependencies
 # Core Django and REST Framework
 Django==5.0.1
 djangorestframework==3.14.0
@@ -5,7 +6,6 @@ django-cors-headers==4.3.1
 
 # Database
 psycopg2-binary==2.9.9
-PyMySQL==1.1.0
 
 # Environment and Configuration
 python-decouple==3.8
@@ -45,8 +45,3 @@ gunicorn==21.2.0
 
 # Static Files
 whitenoise==6.6.0
-
-# Development and Testing (optional)
-# pytest==7.4.3
-# pytest-django==4.7.0
-# coverage==7.3.2
