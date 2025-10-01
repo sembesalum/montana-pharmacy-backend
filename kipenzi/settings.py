@@ -18,7 +18,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-uwf!$!@qgcx2pol!ycfy(_k8i1!5)txkht2ky%l^()np$su9f^'
 DEBUG = True
-ALLOWED_HOSTS = ['geoclimatz.pythonanywhere.com', '127.0.0.1']
+ALLOWED_HOSTS = ['geoclimatz.pythonanywhere.com', '127.0.0.1', 'localhost']
 
 # PROC CODE START ---------------------------------------------------------------------
 
@@ -145,6 +145,24 @@ DATABASES = {
     }
 }
 
+# DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.mysql',
+#             'NAME': 'kipenzi',
+#             'USER': 'root',
+#             'PASSWORD': '3102001Prosper', 
+#             'HOST': 'localhost',
+#             'PORT': '3306',
+#             'OPTIONS': {
+#                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+#                 'charset': 'utf8mb4',
+#                 'connect_timeout': 30,
+#             },
+#             'CONN_MAX_AGE': 300,  # 5 minutes (set to 0 if using connection pooling)
+#         }
+#     }
+# Password validation
+# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {

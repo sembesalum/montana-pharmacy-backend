@@ -112,6 +112,8 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     stock_quantity = models.IntegerField(default=0)
+    minimum_stock = models.IntegerField(default=10)
+    expiry_date = models.DateField(blank=True, null=True)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -169,6 +171,10 @@ class Order(models.Model):
     
     order_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
     user = models.ForeignKey(BusinessUser, on_delete=models.CASCADE, related_name='orders')
+    
+    # Salesperson information
+    salesperson = models.ForeignKey(BusinessUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='processed_orders')
+    salesperson_name = models.CharField(max_length=200, blank=True, null=True)
     
     # Order details
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
@@ -276,6 +282,149 @@ class OrderItem(models.Model):
     
     def __str__(self):
         return f"{self.quantity}x {self.product_name} - Order {self.order.order_id}"
+    
+    def save(self, *args, **kwargs):
+        # Calculate total price
+        self.total_price = self.quantity * self.unit_price
+        super().save(*args, **kwargs)
+
+class Customer(models.Model):
+    """Customer model for sales tracking"""
+    customer_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=15, unique=True)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "customers"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.phone})"
+
+class Shelf(models.Model):
+    """Shelf/Location model for product organization"""
+    shelf_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "shelves"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+class ProductLocation(models.Model):
+    """Product location mapping to shelves"""
+    location_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='locations')
+    shelf = models.ForeignKey(Shelf, on_delete=models.CASCADE, related_name='products')
+    position = models.CharField(max_length=50, blank=True, null=True)  # e.g., "A1", "B2-3"
+    notes = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "product_locations"
+        unique_together = ['product', 'shelf']
+        ordering = ['shelf__name', 'position']
+    
+    def __str__(self):
+        return f"{self.product.name} - {self.shelf.name} ({self.position})"
+
+class Sale(models.Model):
+    """Sales model for tracking individual sales"""
+    PAYMENT_STATUS_CHOICES = [
+        ('paid', 'Paid'),
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partially Paid'),
+    ]
+    
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('mobile_money', 'Mobile Money'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('credit', 'Credit'),
+    ]
+    
+    sale_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    sale_number = models.CharField(max_length=20, blank=True, null=True)
+    
+    # Customer information
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='sales')
+    customer_name = models.CharField(max_length=200, blank=True, null=True)
+    customer_phone = models.CharField(max_length=15, blank=True, null=True)
+    
+    # Salesperson information
+    salesperson = models.ForeignKey(BusinessUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='sales')
+    salesperson_name = models.CharField(max_length=200, blank=True, null=True)
+    
+    # Sale details
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    
+    # Payment information
+    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, default='cash')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='paid')
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "sales"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Sale {self.sale_number} - {self.customer_name or 'Walk-in'}"
+    
+    def generate_sale_number(self):
+        """Generate a human-readable sale number"""
+        if not self.sale_number:
+            from datetime import datetime
+            date_str = datetime.now().strftime('%Y%m%d')
+            today_sales = Sale.objects.filter(created_at__date=datetime.now().date()).count()
+            self.sale_number = f"SALE-{date_str}-{today_sales + 1:04d}"
+            self.save()
+        return self.sale_number
+
+class SaleItem(models.Model):
+    """Individual items in a sale"""
+    sale_item_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    
+    # Item details
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Product snapshot (in case product details change later)
+    product_name = models.CharField(max_length=200)
+    product_description = models.TextField()
+    product_image = models.CharField(max_length=500, blank=True, null=True)
+    category = models.CharField(max_length=100, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = "sale_items"
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.quantity}x {self.product_name} - Sale {self.sale.sale_number}"
     
     def save(self, *args, **kwargs):
         # Calculate total price

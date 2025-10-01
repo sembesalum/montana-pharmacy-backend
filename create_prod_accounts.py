@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to create test accounts for each role in the PRODUCTION database.
-This script temporarily switches to production database settings.
-Run this script to create demo accounts for testing the admin dashboard in production.
+Script to create test accounts in PRODUCTION database.
+This script uses production settings to connect to the production MySQL database.
 """
 
 import os
@@ -13,8 +12,8 @@ from django.conf import settings
 # Add the project directory to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Setup Django with production settings
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kipenzi.settings')
+# Setup Django with PRODUCTION settings
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kipenzi.settings_production')
 django.setup()
 
 from hardware_backend.models import BusinessUser
@@ -25,6 +24,8 @@ def create_production_test_accounts():
     """Create test accounts for each role in production database"""
     
     print("🚀 Creating test accounts for PRODUCTION database...")
+    print("=" * 60)
+    print("🌐 Database: geoclimatz.mysql.pythonanywhere-services.com")
     print("=" * 60)
     
     # Test accounts data
@@ -93,6 +94,7 @@ def create_production_test_accounts():
     
     created_accounts = []
     updated_accounts = []
+    errors = []
     
     for account_data in test_accounts:
         try:
@@ -126,11 +128,19 @@ def create_production_test_accounts():
                 print(f"✅ Created user: {account_data['business_name']} ({account_data['phone_number']})")
                 
         except Exception as e:
-            print(f"❌ Error creating user {account_data['phone_number']}: {str(e)}")
+            error_msg = f"❌ Error creating user {account_data['phone_number']}: {str(e)}"
+            print(error_msg)
+            errors.append(error_msg)
     
     print(f"\n🎉 Successfully processed {len(created_accounts + updated_accounts)} test accounts!")
     print(f"   - Created: {len(created_accounts)} new accounts")
     print(f"   - Updated: {len(updated_accounts)} existing accounts")
+    
+    if errors:
+        print(f"   - Errors: {len(errors)} failed accounts")
+        print("\n❌ Errors encountered:")
+        for error in errors:
+            print(f"   {error}")
     
     print("\n📋 Production Test Account Credentials:")
     print("=" * 60)
@@ -149,10 +159,14 @@ def create_production_test_accounts():
     print("🌐 Production URL: https://geoclimatz.pythonanywhere.com")
     print("💡 Note: The 'unverified' account will require OTP verification during login.")
     
-    # Test database connection
+    # Test database connection and show stats
     try:
         total_users = BusinessUser.objects.count()
-        print(f"\n📊 Database Status: {total_users} total users in production database")
+        verified_users = BusinessUser.objects.filter(is_verified=True).count()
+        print(f"\n📊 Production Database Status:")
+        print(f"   - Total users: {total_users}")
+        print(f"   - Verified users: {verified_users}")
+        print(f"   - Unverified users: {total_users - verified_users}")
     except Exception as e:
         print(f"\n⚠️  Database connection test failed: {str(e)}")
 

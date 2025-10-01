@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, Banner, HardwareOTP, Order, OrderItem
+    Product, Banner, HardwareOTP, Order, OrderItem,
+    Customer, Shelf, ProductLocation, Sale, SaleItem
 )
 import random
 import string
@@ -295,4 +296,171 @@ class CreateOrderSerializer(serializers.ModelSerializer):
         # Calculate order totals
         order.calculate_totals()
         
-        return order 
+        return order
+
+# New serializers for sales functionality
+
+class CustomerSerializer(serializers.ModelSerializer):
+    """Serializer for customer data"""
+    class Meta:
+        model = Customer
+        fields = [
+            'customer_id', 'name', 'phone', 'email', 'address', 
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['customer_id', 'created_at', 'updated_at']
+
+class CustomerSearchSerializer(serializers.ModelSerializer):
+    """Serializer for customer search results"""
+    class Meta:
+        model = Customer
+        fields = ['customer_id', 'name', 'phone', 'email']
+
+class ShelfSerializer(serializers.ModelSerializer):
+    """Serializer for shelf data"""
+    class Meta:
+        model = Shelf
+        fields = [
+            'shelf_id', 'name', 'description', 'is_active', 
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['shelf_id', 'created_at', 'updated_at']
+
+class ProductLocationSerializer(serializers.ModelSerializer):
+    """Serializer for product location data"""
+    shelf_name = serializers.CharField(source='shelf.name', read_only=True)
+    
+    class Meta:
+        model = ProductLocation
+        fields = [
+            'location_id', 'product', 'shelf', 'shelf_name', 'position', 
+            'notes', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['location_id', 'created_at', 'updated_at']
+
+class SaleItemSerializer(serializers.ModelSerializer):
+    """Serializer for sale item data"""
+    class Meta:
+        model = SaleItem
+        fields = [
+            'sale_item_id', 'product', 'quantity', 'unit_price', 'total_price',
+            'product_name', 'product_description', 'product_image', 'category', 'created_at'
+        ]
+        read_only_fields = ['sale_item_id', 'total_price', 'created_at']
+
+class SaleSerializer(serializers.ModelSerializer):
+    """Serializer for sale data"""
+    items = SaleItemSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    salesperson_name = serializers.CharField(source='salesperson.business_name', read_only=True)
+    
+    class Meta:
+        model = Sale
+        fields = [
+            'sale_id', 'sale_number', 'customer', 'customer_name', 'customer_phone',
+            'salesperson', 'salesperson_name', 'subtotal', 'discount_amount', 
+            'tax_amount', 'total_amount', 'payment_method', 'payment_status', 
+            'paid_amount', 'created_at', 'updated_at', 'items'
+        ]
+        read_only_fields = [
+            'sale_id', 'sale_number', 'total_amount', 'subtotal', 'tax_amount', 
+            'created_at', 'updated_at'
+        ]
+
+class CreateSaleSerializer(serializers.ModelSerializer):
+    """Serializer for creating sales"""
+    items = serializers.ListField(child=serializers.DictField(), write_only=True)
+    
+    class Meta:
+        model = Sale
+        fields = [
+            'customer', 'customer_name', 'customer_phone', 'salesperson',
+            'discount_amount', 'payment_method', 'payment_status', 'paid_amount', 'items'
+        ]
+    
+    def validate_items(self, value):
+        """Validate sale items"""
+        if not value:
+            raise serializers.ValidationError("At least one item is required")
+        
+        for item in value:
+            if 'product_id' not in item or 'quantity' not in item:
+                raise serializers.ValidationError("Each item must have product_id and quantity")
+            
+            if item['quantity'] <= 0:
+                raise serializers.ValidationError("Quantity must be greater than 0")
+        
+        return value
+    
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        user = self.context['request'].user
+        
+        # Create sale
+        sale = Sale.objects.create(
+            salesperson=user,
+            salesperson_name=user.business_name,
+            **validated_data
+        )
+        
+        # Generate sale number
+        sale.generate_sale_number()
+        
+        # Create sale items
+        subtotal = 0
+        for item_data in items_data:
+            try:
+                product = Product.objects.get(product_id=item_data['product_id'])
+                
+                # Check stock availability
+                if product.stock_quantity < item_data['quantity']:
+                    raise serializers.ValidationError(
+                        f"Insufficient stock for {product.name}. Available: {product.stock_quantity}"
+                    )
+                
+                # Create sale item
+                sale_item = SaleItem.objects.create(
+                    sale=sale,
+                    product=product,
+                    quantity=item_data['quantity'],
+                    unit_price=product.price,
+                    product_name=product.name,
+                    product_description=product.description,
+                    product_image=product.image,
+                    category=product.product_type.name
+                )
+                
+                # Update product stock
+                product.stock_quantity -= item_data['quantity']
+                product.save()
+                
+                subtotal += sale_item.total_price
+                
+            except Product.DoesNotExist:
+                raise serializers.ValidationError(f"Product with ID {item_data['product_id']} not found")
+        
+        # Calculate totals
+        sale.subtotal = subtotal
+        sale.tax_amount = subtotal * 0.18  # 18% VAT
+        sale.total_amount = sale.subtotal + sale.tax_amount - sale.discount_amount
+        sale.save()
+        
+        return sale
+
+class ProductWithLocationSerializer(serializers.ModelSerializer):
+    """Serializer for products with location information"""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+    product_type_name = serializers.CharField(source='product_type.name', read_only=True)
+    locations = ProductLocationSerializer(source='locations', many=True, read_only=True)
+    
+    class Meta:
+        model = Product
+        fields = [
+            'product_id', 'name', 'description', 'price', 'image',
+            'category', 'category_name', 'brand', 'brand_name', 
+            'product_type', 'product_type_name', 'subtype', 'size', 
+            'color', 'material', 'weight', 'dimensions', 'is_active', 
+            'is_featured', 'stock_quantity', 'minimum_stock', 'expiry_date',
+            'created_at', 'updated_at', 'locations'
+        ] 

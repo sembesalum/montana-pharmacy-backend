@@ -82,4 +82,26 @@ urlpatterns = [
     # Admin Order Management APIs
     path('admin/orders/', views.admin_get_all_orders, name='admin_get_all_orders'),
     path('admin/orders/status/<str:status>/', views.admin_get_orders_by_status, name='admin_get_orders_by_status'),
+    
+    # Sales Management APIs
+    path('customers/', views.get_customers, name='get_customers'),
+    path('customers/search/', views.search_customers, name='search_customers'),
+    path('customers/create/', views.create_customer, name='create_customer'),
+    
+    # Shelf Management APIs
+    path('shelves/', views.get_shelves, name='get_shelves'),
+    path('shelves/create/', views.create_shelf, name='create_shelf'),
+    
+    # Products with Locations
+    path('products-with-locations/', views.get_products_with_locations, name='get_products_with_locations'),
+    
+    # Sales APIs
+    path('sales/', views.get_sales, name='get_sales'),
+    path('sales/create/', views.create_sale, name='create_sale'),
+    path('sales/salesperson/<str:salesperson_id>/', views.get_sales_by_salesperson, name='get_sales_by_salesperson'),
+    path('sales/<str:sale_id>/update-payment/', views.update_sale_payment_status, name='update_sale_payment_status'),
+    
+    # Inventory Alerts
+    path('alerts/low-stock/', views.get_low_stock_products, name='get_low_stock_products'),
+    path('alerts/expiring/', views.get_expiring_products, name='get_expiring_products'),
 ] 

@@ -13,7 +13,8 @@ from .utils import handle_image_upload
 
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, Banner, HardwareOTP, Order, OrderItem
+    Product, Banner, HardwareOTP, Order, OrderItem,
+    Customer, Shelf, ProductLocation, Sale, SaleItem
 )
 from .serializers import (
     BusinessUserRegistrationSerializer, BusinessUserLoginSerializer,
@@ -21,7 +22,10 @@ from .serializers import (
     BrandSerializer, ProductTypeSerializer, ProductSerializer,
     BannerSerializer, HomePageSerializer, ProductsPageSerializer,
     ProductTypeWithProductsSerializer, OrderSerializer, CreateOrderSerializer,
-    OrderItemSerializer, OrderResponseSerializer, OrderItemResponseSerializer
+    OrderItemSerializer, OrderResponseSerializer, OrderItemResponseSerializer,
+    CustomerSerializer, CustomerSearchSerializer, ShelfSerializer,
+    ProductLocationSerializer, SaleSerializer, CreateSaleSerializer,
+    SaleItemSerializer, ProductWithLocationSerializer
 )
 
 def generate_otp():
@@ -1993,4 +1997,306 @@ def admin_get_orders_by_status(request, status):
         return Response({
             'success': False,
             'message': f'Failed to fetch orders: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Sales Management Views
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_customers(request):
+    """Get all customers"""
+    try:
+        customers = Customer.objects.filter(is_active=True)
+        customers_serializer = CustomerSerializer(customers, many=True)
+        
+        return Response({
+            'success': True,
+            'data': customers_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch customers: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def search_customers(request):
+    """Search customers by name or phone"""
+    try:
+        query = request.data.get('query', '').strip()
+        if not query:
+            return Response({
+                'success': False,
+                'message': 'Search query is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        customers = Customer.objects.filter(
+            is_active=True,
+            name__icontains=query
+        ) | Customer.objects.filter(
+            is_active=True,
+            phone__icontains=query
+        )
+        
+        customers_serializer = CustomerSearchSerializer(customers, many=True)
+        
+        return Response({
+            'success': True,
+            'data': customers_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Search failed: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_customer(request):
+    """Create a new customer"""
+    try:
+        serializer = CustomerSerializer(data=request.data)
+        if serializer.is_valid():
+            customer = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Customer created successfully',
+                'data': CustomerSerializer(customer).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create customer: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_shelves(request):
+    """Get all shelves"""
+    try:
+        shelves = Shelf.objects.filter(is_active=True)
+        shelves_serializer = ShelfSerializer(shelves, many=True)
+        
+        return Response({
+            'success': True,
+            'data': shelves_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch shelves: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_shelf(request):
+    """Create a new shelf"""
+    try:
+        serializer = ShelfSerializer(data=request.data)
+        if serializer.is_valid():
+            shelf = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Shelf created successfully',
+                'data': ShelfSerializer(shelf).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create shelf: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_products_with_locations(request):
+    """Get all products with location information"""
+    try:
+        products = Product.objects.filter(is_active=True).prefetch_related('locations__shelf')
+        products_serializer = ProductWithLocationSerializer(products, many=True)
+        
+        return Response({
+            'success': True,
+            'data': products_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch products: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_sale(request):
+    """Create a new sale"""
+    try:
+        # Create a mock request context for the serializer
+        user_id = request.data.get('salesperson_id')
+        if not user_id:
+            return Response({
+                'success': False,
+                'message': 'salesperson_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = BusinessUser.objects.get(user_id=user_id)
+        except BusinessUser.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Salesperson not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        mock_request = type('MockRequest', (), {'user': user})()
+        
+        serializer = CreateSaleSerializer(data=request.data, context={'request': mock_request})
+        if serializer.is_valid():
+            sale = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Sale created successfully',
+                'data': SaleSerializer(sale).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create sale: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_sales(request):
+    """Get all sales"""
+    try:
+        sales = Sale.objects.select_related('customer', 'salesperson').prefetch_related('items').all()
+        sales_serializer = SaleSerializer(sales, many=True)
+        
+        return Response({
+            'success': True,
+            'data': sales_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch sales: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_sales_by_salesperson(request, salesperson_id):
+    """Get sales by specific salesperson"""
+    try:
+        sales = Sale.objects.filter(
+            salesperson_id=salesperson_id
+        ).select_related('customer', 'salesperson').prefetch_related('items')
+        
+        sales_serializer = SaleSerializer(sales, many=True)
+        
+        return Response({
+            'success': True,
+            'data': sales_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch sales: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def update_sale_payment_status(request, sale_id):
+    """Update sale payment status"""
+    try:
+        try:
+            sale = Sale.objects.get(sale_id=sale_id)
+        except Sale.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Sale not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        payment_status = request.data.get('payment_status')
+        paid_amount = request.data.get('paid_amount', 0)
+        
+        if payment_status:
+            sale.payment_status = payment_status
+        
+        if paid_amount:
+            sale.paid_amount = paid_amount
+        
+        sale.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Sale payment status updated successfully',
+            'data': SaleSerializer(sale).data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update sale: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_low_stock_products(request):
+    """Get products with low stock"""
+    try:
+        from django.db import models
+        products = Product.objects.filter(
+            is_active=True,
+            stock_quantity__lte=models.F('minimum_stock')
+        )
+        products_serializer = ProductWithLocationSerializer(products, many=True)
+        
+        return Response({
+            'success': True,
+            'data': products_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch low stock products: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_expiring_products(request):
+    """Get products expiring soon (within 30 days)"""
+    try:
+        from datetime import date, timedelta
+        thirty_days_from_now = date.today() + timedelta(days=30)
+        
+        products = Product.objects.filter(
+            is_active=True,
+            expiry_date__lte=thirty_days_from_now,
+            expiry_date__gte=date.today()
+        )
+        products_serializer = ProductWithLocationSerializer(products, many=True)
+        
+        return Response({
+            'success': True,
+            'data': products_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch expiring products: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
