@@ -356,7 +356,7 @@ class Sale(models.Model):
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PAID')
     salesperson = models.ForeignKey(BusinessUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='sales')
     salesperson_name = models.CharField(max_length=200, blank=True, null=True)
-    sale_date = models.DateTimeField(auto_now_add=True)
+    sale_date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
