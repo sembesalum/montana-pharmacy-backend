@@ -249,7 +249,8 @@ def main():
     try:
         # Verify Django setup
         from django.conf import settings
-        print(f"📦 Django Settings: {settings.DJANGO_SETTINGS_MODULE}")
+        django_settings_module = os.environ.get('DJANGO_SETTINGS_MODULE', 'Not set')
+        print(f"📦 Django Settings Module: {django_settings_module}")
         
         # Verify database connection
         from django.db import connection
