@@ -14,19 +14,19 @@ from .utils import handle_image_upload
 
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, Banner, HardwareOTP, Order, OrderItem,
-    Customer, Shelf, ProductLocation, Sale, SaleItem
+    Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem,
+    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense
 )
 from .serializers import (
     BusinessUserRegistrationSerializer, BusinessUserLoginSerializer,
     BusinessUserSerializer, OTPSerializer, ProductCategorySerializer,
-    BrandSerializer, ProductTypeSerializer, ProductSerializer,
+    BrandSerializer, ProductTypeSerializer, ProductSerializer, ProductBatchSerializer,
     BannerSerializer, HomePageSerializer, ProductsPageSerializer,
     ProductTypeWithProductsSerializer, OrderSerializer, CreateOrderSerializer,
     OrderItemSerializer, OrderResponseSerializer, OrderItemResponseSerializer,
     CustomerSerializer, CustomerSearchSerializer, ShelfSerializer,
     ProductLocationSerializer, SaleSerializer, SaleItemSerializer,
-    CreateSaleSerializer, ProductWithLocationSerializer
+    CreateSaleSerializer, ProductWithLocationSerializer, ExpenseSerializer
 )
 
 def generate_otp():
@@ -1291,6 +1291,135 @@ def admin_toggle_product_type_status(request, product_type_id):
             'message': f'Failed to toggle product type status: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# Shelf Admin Views
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_get_all_shelves(request):
+    """Admin: Get all shelves (including inactive)"""
+    try:
+        shelves = Shelf.objects.all().order_by('name')
+        serializer = ShelfSerializer(shelves, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch shelves: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_create_shelf(request):
+    """Admin: Create a new shelf"""
+    try:
+        serializer = ShelfSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            shelf = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Shelf created successfully',
+                'data': ShelfSerializer(shelf).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create shelf: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def admin_update_shelf(request, shelf_id):
+    """Admin: Update a shelf"""
+    try:
+        try:
+            shelf = Shelf.objects.get(shelf_id=shelf_id)
+        except Shelf.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Shelf not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ShelfSerializer(shelf, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated_shelf = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Shelf updated successfully',
+                'data': ShelfSerializer(updated_shelf).data
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update shelf: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def admin_delete_shelf(request, shelf_id):
+    """Admin: Delete a shelf"""
+    try:
+        try:
+            shelf = Shelf.objects.get(shelf_id=shelf_id)
+        except Shelf.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Shelf not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        shelf.delete()
+        return Response({
+            'success': True,
+            'message': 'Shelf deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to delete shelf: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def admin_toggle_shelf_status(request, shelf_id):
+    """Admin: Toggle shelf active status"""
+    try:
+        try:
+            shelf = Shelf.objects.get(shelf_id=shelf_id)
+        except Shelf.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Shelf not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        shelf.is_active = not shelf.is_active
+        shelf.save()
+        
+        return Response({
+            'success': True,
+            'message': f'Shelf {"activated" if shelf.is_active else "deactivated"} successfully',
+            'data': ShelfSerializer(shelf).data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to toggle shelf status: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # Banner Admin Views
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -2005,14 +2134,29 @@ def admin_get_orders_by_status(request, status):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_customers(request):
-    """Get all customers"""
+    """Get all customers - includes both Customer and BusinessUser"""
     try:
+        # Get all customers
         customers = Customer.objects.all().order_by('-created_at')
-        serializer = CustomerSerializer(customers, many=True)
+        customer_serializer = CustomerSerializer(customers, many=True)
+        results = list(customer_serializer.data)
+        
+        # Also get all BusinessUsers (users) and convert to customer format
+        users = BusinessUser.objects.all().order_by('-created_at')
+        for user in users:
+            results.append({
+                'customer_id': f"USER-{user.user_id}",  # Prefix to distinguish from regular customers
+                'name': user.business_name,
+                'phone': user.phone_number,
+                'email': None,  # BusinessUser doesn't have email in the model
+                'address': user.business_location,
+                'created_at': user.created_at.isoformat() if user.created_at else timezone.now().isoformat(),
+                'updated_at': user.updated_at.isoformat() if user.updated_at else timezone.now().isoformat(),
+            })
         
         return Response({
             'success': True,
-            'data': serializer.data
+            'data': results
         }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
@@ -2024,7 +2168,7 @@ def get_customers(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def search_customers(request):
-    """Search customers by name or phone"""
+    """Search customers by name or phone - includes both Customer and BusinessUser"""
     try:
         query = request.GET.get('q', '').strip()
         
@@ -2034,16 +2178,43 @@ def search_customers(request):
                 'data': []
             }, status=status.HTTP_200_OK)
         
+        # Search in Customer model
         customers = Customer.objects.filter(
             models.Q(name__icontains=query) | 
             models.Q(phone__icontains=query)
         ).order_by('name')[:10]
         
-        serializer = CustomerSearchSerializer(customers, many=True)
+        customer_serializer = CustomerSearchSerializer(customers, many=True)
+        results = list(customer_serializer.data)
+        
+        # Also search in BusinessUser model (users)
+        users = BusinessUser.objects.filter(
+            models.Q(business_name__icontains=query) | 
+            models.Q(phone_number__icontains=query)
+        ).order_by('business_name')[:10]
+        
+        # Convert BusinessUser to customer-like format
+        for user in users:
+            results.append({
+                'customer_id': f"USER-{user.user_id}",  # Prefix to distinguish from regular customers
+                'name': user.business_name,
+                'phone': user.phone_number,
+            })
+        
+        # Remove duplicates based on phone number and limit to 10 total
+        seen_phones = set()
+        unique_results = []
+        for item in results:
+            phone = item.get('phone', '')
+            if phone and phone not in seen_phones:
+                seen_phones.add(phone)
+                unique_results.append(item)
+                if len(unique_results) >= 10:
+                    break
         
         return Response({
             'success': True,
-            'data': serializer.data
+            'data': unique_results
         }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
@@ -2311,14 +2482,29 @@ def get_expiring_products(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_customers(request):
-    """Get all customers"""
+    """Get all customers - includes both Customer and BusinessUser"""
     try:
+        # Get all customers
         customers = Customer.objects.all().order_by('-created_at')
-        serializer = CustomerSerializer(customers, many=True)
+        customer_serializer = CustomerSerializer(customers, many=True)
+        results = list(customer_serializer.data)
+        
+        # Also get all BusinessUsers (users) and convert to customer format
+        users = BusinessUser.objects.all().order_by('-created_at')
+        for user in users:
+            results.append({
+                'customer_id': f"USER-{user.user_id}",  # Prefix to distinguish from regular customers
+                'name': user.business_name,
+                'phone': user.phone_number,
+                'email': None,  # BusinessUser doesn't have email in the model
+                'address': user.business_location,
+                'created_at': user.created_at.isoformat() if user.created_at else timezone.now().isoformat(),
+                'updated_at': user.updated_at.isoformat() if user.updated_at else timezone.now().isoformat(),
+            })
         
         return Response({
             'success': True,
-            'data': serializer.data
+            'data': results
         }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
@@ -2330,7 +2516,7 @@ def get_customers(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def search_customers(request):
-    """Search customers by name or phone"""
+    """Search customers by name or phone - includes both Customer and BusinessUser"""
     try:
         query = request.GET.get('q', '').strip()
         
@@ -2340,16 +2526,43 @@ def search_customers(request):
                 'data': []
             }, status=status.HTTP_200_OK)
         
+        # Search in Customer model
         customers = Customer.objects.filter(
             models.Q(name__icontains=query) | 
             models.Q(phone__icontains=query)
         ).order_by('name')[:10]
         
-        serializer = CustomerSearchSerializer(customers, many=True)
+        customer_serializer = CustomerSearchSerializer(customers, many=True)
+        results = list(customer_serializer.data)
+        
+        # Also search in BusinessUser model (users)
+        users = BusinessUser.objects.filter(
+            models.Q(business_name__icontains=query) | 
+            models.Q(phone_number__icontains=query)
+        ).order_by('business_name')[:10]
+        
+        # Convert BusinessUser to customer-like format
+        for user in users:
+            results.append({
+                'customer_id': f"USER-{user.user_id}",  # Prefix to distinguish from regular customers
+                'name': user.business_name,
+                'phone': user.phone_number,
+            })
+        
+        # Remove duplicates based on phone number and limit to 10 total
+        seen_phones = set()
+        unique_results = []
+        for item in results:
+            phone = item.get('phone', '')
+            if phone and phone not in seen_phones:
+                seen_phones.add(phone)
+                unique_results.append(item)
+                if len(unique_results) >= 10:
+                    break
         
         return Response({
             'success': True,
-            'data': serializer.data
+            'data': unique_results
         }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
@@ -2610,4 +2823,571 @@ def get_expiring_products(request):
         return Response({
             'success': False,
             'message': f'Failed to fetch expiring products: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Product Batch Management APIs
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_product_batch(request):
+    """Create a new product batch"""
+    try:
+        product_id = request.data.get('product_id')
+        if not product_id:
+            return Response({
+                'success': False,
+                'message': 'Product ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            product = Product.objects.get(product_id=product_id)
+        except Product.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Product not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Create batch
+        batch = ProductBatch.objects.create(
+            product=product,
+            batch_number=request.data.get('batch_number'),
+            supplier=request.data.get('supplier'),
+            cost_price=request.data.get('cost_price'),
+            selling_price=request.data.get('selling_price'),
+            quantity_received=request.data.get('quantity_received'),
+            quantity_remaining=request.data.get('quantity_received'),
+            expiry_date=request.data.get('expiry_date'),
+            is_active=True
+        )
+        
+        # Update product stock
+        product.stock_quantity += batch.quantity_received
+        product.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Batch created successfully',
+            'data': ProductBatchSerializer(batch).data
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create batch: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_product_batches(request, product_id):
+    """Get all batches for a product"""
+    try:
+        try:
+            product = Product.objects.get(product_id=product_id)
+        except Product.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Product not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        batches = ProductBatch.objects.filter(product=product).order_by('-received_date')
+        serializer = ProductBatchSerializer(batches, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch batches: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def update_product_batch(request, batch_id):
+    """Update a product batch"""
+    try:
+        try:
+            batch = ProductBatch.objects.get(batch_id=batch_id)
+        except ProductBatch.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Batch not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        if 'batch_number' in request.data:
+            batch.batch_number = request.data['batch_number']
+        if 'supplier' in request.data:
+            batch.supplier = request.data['supplier']
+        if 'cost_price' in request.data:
+            batch.cost_price = request.data['cost_price']
+        if 'selling_price' in request.data:
+            batch.selling_price = request.data['selling_price']
+        if 'quantity_remaining' in request.data:
+            batch.quantity_remaining = request.data['quantity_remaining']
+        if 'expiry_date' in request.data:
+            batch.expiry_date = request.data['expiry_date']
+        if 'is_active' in request.data:
+            batch.is_active = request.data['is_active']
+        
+        batch.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Batch updated successfully',
+            'data': ProductBatchSerializer(batch).data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update batch: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_product_batch(request, batch_id):
+    """Delete a product batch"""
+    try:
+        try:
+            batch = ProductBatch.objects.get(batch_id=batch_id)
+        except ProductBatch.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Batch not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        product = batch.product
+        product.stock_quantity -= batch.quantity_remaining
+        if product.stock_quantity < 0:
+            product.stock_quantity = 0
+        product.save()
+        
+        batch.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Batch deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to delete batch: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Expense Management APIs
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_get_all_expenses(request):
+    """Admin: Get all expenses"""
+    try:
+        expenses = Expense.objects.all().select_related('created_by', 'approved_by').order_by('-created_at')
+        serializer = ExpenseSerializer(expenses, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch expenses: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_create_expense(request):
+    """Admin: Create a new expense"""
+    try:
+        serializer = ExpenseSerializer(data=request.data)
+        if serializer.is_valid():
+            expense = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Expense created successfully',
+                'data': ExpenseSerializer(expense).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create expense: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def admin_update_expense(request, expense_id):
+    """Admin: Update an expense"""
+    try:
+        try:
+            expense = Expense.objects.get(expense_id=expense_id)
+        except Expense.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Expense not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ExpenseSerializer(expense, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated_expense = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Expense updated successfully',
+                'data': ExpenseSerializer(updated_expense).data
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update expense: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def admin_delete_expense(request, expense_id):
+    """Admin: Delete an expense"""
+    try:
+        try:
+            expense = Expense.objects.get(expense_id=expense_id)
+        except Expense.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Expense not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        expense.delete()
+        return Response({
+            'success': True,
+            'message': 'Expense deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to delete expense: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def admin_update_expense_status(request, expense_id):
+    """Admin: Update expense status"""
+    try:
+        try:
+            expense = Expense.objects.get(expense_id=expense_id)
+        except Expense.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Expense not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        new_status = request.data.get('status')
+        if not new_status:
+            return Response({
+                'success': False,
+                'message': 'status is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if new_status not in ['PENDING', 'APPROVED', 'REJECTED']:
+            return Response({
+                'success': False,
+                'message': 'Invalid status. Valid options: PENDING, APPROVED, REJECTED'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        expense.status = new_status
+        
+        # Set approved_by if status is being changed to APPROVED or REJECTED
+        if new_status in ['APPROVED', 'REJECTED']:
+            user_id = request.data.get('approved_by')
+            if user_id:
+                try:
+                    user = BusinessUser.objects.get(user_id=user_id)
+                    expense.approved_by = user
+                except BusinessUser.DoesNotExist:
+                    pass
+        
+        expense.save()
+        
+        return Response({
+            'success': True,
+            'message': f'Expense status updated to {new_status}',
+            'data': ExpenseSerializer(expense).data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update expense status: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Financial Overview API
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_financial_overview(request):
+    """Get financial overview including cash flow and debts"""
+    try:
+        from django.utils import timezone
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        # Get period filter from query params
+        period = request.GET.get('period', 'this_month')
+        today = timezone.now().date()
+        
+        # Calculate date range based on period
+        if period == 'today':
+            start_date = today
+            end_date = today
+        elif period == 'this_week':
+            start_date = today - timedelta(days=today.weekday())
+            end_date = today
+        elif period == 'this_month':
+            start_date = today.replace(day=1)
+            end_date = today
+        elif period == 'last_month':
+            if today.month == 1:
+                start_date = today.replace(year=today.year - 1, month=12, day=1)
+            else:
+                start_date = today.replace(month=today.month - 1, day=1)
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        elif period == 'this_year':
+            start_date = today.replace(month=1, day=1)
+            end_date = today
+        else:
+            start_date = None
+            end_date = None
+        
+        # Get income from sales (PAID sales only)
+        sales_query = Sale.objects.filter(payment_status='PAID')
+        if start_date and end_date:
+            sales_query = sales_query.filter(sale_date__date__gte=start_date, sale_date__date__lte=end_date)
+        
+        total_income = sales_query.aggregate(
+            total=models.Sum('total_amount')
+        )['total'] or Decimal('0.00')
+        
+        # Get expenses (APPROVED expenses only)
+        expenses_query = Expense.objects.filter(status='APPROVED')
+        if start_date and end_date:
+            expenses_query = expenses_query.filter(expense_date__gte=start_date, expense_date__lte=end_date)
+        
+        total_expenses = expenses_query.aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        net_cash_flow = total_income - total_expenses
+        
+        # Build transactions list from sales and expenses
+        transactions = []
+        
+        # Add sales as income transactions
+        for sale in sales_query.order_by('-sale_date')[:50]:  # Limit to 50 most recent
+            transactions.append({
+                'id': f"SALE-{sale.sale_id}",
+                'type': 'INCOME',
+                'description': f"Sale to {sale.customer_name or 'Walk-in Customer'}",
+                'amount': float(sale.total_amount),
+                'date': sale.sale_date.isoformat(),
+                'category': 'Sales',
+            })
+        
+        # Add expenses as expense transactions
+        for expense in expenses_query.order_by('-expense_date')[:50]:  # Limit to 50 most recent
+            transactions.append({
+                'id': f"EXP-{expense.expense_id}",
+                'type': 'EXPENSE',
+                'description': expense.title,
+                'amount': float(expense.amount),
+                'date': expense.expense_date.isoformat() + 'T00:00:00Z',
+                'category': expense.category,
+            })
+        
+        # Sort transactions by date (most recent first)
+        transactions.sort(key=lambda x: x['date'], reverse=True)
+        transactions = transactions[:50]  # Limit to 50 most recent overall
+        
+        # Get debts from orders (unpaid or partially paid orders)
+        debts = []
+        unpaid_orders = Order.objects.filter(
+            models.Q(payment_status__in=['pending', 'unpaid', 'partial']) |
+            models.Q(payment_status='pay_on_delivery', status__in=['confirmed', 'processing', 'shipped', 'delivered'])
+        ).exclude(status='cancelled')
+        
+        for order in unpaid_orders:
+            # Calculate amount owed
+            if order.partial_amount:
+                amount_owed = float(order.total_amount - order.partial_amount)
+            else:
+                amount_owed = float(order.total_amount)
+            
+            # Determine status
+            if order.partial_amount and order.partial_amount > 0:
+                debt_status = 'PARTIAL'
+            else:
+                # Check if overdue (assuming due date is 30 days after order)
+                due_date = order.created_at.date() + timedelta(days=30)
+                if today > due_date:
+                    debt_status = 'OVERDUE'
+                else:
+                    debt_status = 'PENDING'
+            
+            debts.append({
+                'debt_id': f"DEBT-{order.order_id}",
+                'customer_name': order.user.business_name,
+                'customer_phone': order.delivery_phone,
+                'amount_owed': amount_owed,
+                'original_amount': float(order.total_amount),
+                'due_date': (order.created_at.date() + timedelta(days=30)).isoformat() + 'T00:00:00Z',
+                'status': debt_status,
+                'created_date': order.created_at.isoformat(),
+            })
+        
+        return Response({
+            'success': True,
+            'data': {
+                'cash_flow': {
+                    'total_income': float(total_income),
+                    'total_expenses': float(total_expenses),
+                    'net_cash_flow': float(net_cash_flow),
+                    'transactions': transactions,
+                },
+                'debts': debts,
+            }
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch financial overview: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Reports & Analytics API
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_reports_analytics(request):
+    """Get reports and analytics data including sales, products, and employee performance"""
+    try:
+        from django.utils import timezone
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        # Get date range from query params
+        start_date_str = request.GET.get('start_date')
+        end_date_str = request.GET.get('end_date')
+        
+        if start_date_str and end_date_str:
+            try:
+                start_date = timezone.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = timezone.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'message': 'Invalid date format. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Default to last 30 days
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=30)
+        
+        # Get sales data
+        sales_query = Sale.objects.filter(
+            sale_date__date__gte=start_date,
+            sale_date__date__lte=end_date
+        ).select_related('customer', 'salesperson').prefetch_related('items__product')
+        
+        sales_data = []
+        for sale in sales_query:
+            items = []
+            for item in sale.items.all():
+                items.append({
+                    'product_id': item.product.product_id if item.product else '',
+                    'product_name': item.product_name,
+                    'quantity': item.quantity,
+                    'unit_price': float(item.unit_price),
+                    'total': float(item.total_price),
+                })
+            
+            sales_data.append({
+                'id': sale.sale_id,
+                'date': sale.sale_date.date().isoformat(),
+                'customer_name': sale.customer_name or (sale.customer.name if sale.customer else 'Walk-in Customer'),
+                'customer_phone': sale.customer_phone or (sale.customer.phone if sale.customer else ''),
+                'items': items,
+                'total_amount': float(sale.total_amount),
+                'payment_method': sale.payment_method,
+                'payment_status': sale.payment_status,
+                'employee': sale.salesperson_name or (sale.salesperson.business_name if sale.salesperson else 'Unknown'),
+            })
+        
+        # Get product performance data
+        products_data = []
+        product_sales_map = {}
+        
+        # Aggregate sales by product
+        for sale in sales_query:
+            for item in sale.items.all():
+                product_id = item.product.product_id if item.product else None
+                if not product_id:
+                    continue
+                
+                if product_id not in product_sales_map:
+                    product = item.product
+                    product_sales_map[product_id] = {
+                        'id': product_id,
+                        'name': product.name,
+                        'category': product.category.name if product.category else 'Uncategorized',
+                        'stock': product.stock_quantity,
+                        'price': float(product.price),
+                        'cost': 0,  # Cost not available in model, default to 0
+                        'sales_count': 0,
+                        'revenue': 0,
+                    }
+                
+                product_sales_map[product_id]['sales_count'] += item.quantity
+                product_sales_map[product_id]['revenue'] += float(item.total_price)
+        
+        products_data = list(product_sales_map.values())
+        products_data.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        # Get employee performance data
+        employee_map = {}
+        
+        for sale in sales_query:
+            employee_name = sale.salesperson_name or (sale.salesperson.business_name if sale.salesperson else 'Unknown')
+            
+            if employee_name not in employee_map:
+                employee_map[employee_name] = {
+                    'name': employee_name,
+                    'sales_count': 0,
+                    'total_revenue': 0,
+                    'avg_sale_value': 0,
+                }
+            
+            employee_map[employee_name]['sales_count'] += 1
+            employee_map[employee_name]['total_revenue'] += float(sale.total_amount)
+        
+        # Calculate averages
+        for emp in employee_map.values():
+            if emp['sales_count'] > 0:
+                emp['avg_sale_value'] = emp['total_revenue'] / emp['sales_count']
+        
+        employees_data = list(employee_map.values())
+        employees_data.sort(key=lambda x: x['total_revenue'], reverse=True)
+        
+        return Response({
+            'success': True,
+            'data': {
+                'sales': sales_data,
+                'products': products_data,
+                'employees': employees_data,
+            }
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch reports data: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

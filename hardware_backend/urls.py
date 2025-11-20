@@ -58,6 +58,13 @@ urlpatterns = [
     # Product Type detail (for frontend)
     path('product-types/<str:product_type_id>/', views.admin_update_product_type, name='get_product_type'),
     
+    # Shelves
+    path('admin/shelves/', views.admin_get_all_shelves, name='admin_get_all_shelves'),
+    path('admin/shelves/create/', views.admin_create_shelf, name='admin_create_shelf'),
+    path('admin/shelves/<str:shelf_id>/', views.admin_update_shelf, name='admin_update_shelf'),
+    path('admin/shelves/<str:shelf_id>/delete/', views.admin_delete_shelf, name='admin_delete_shelf'),
+    path('admin/shelves/<str:shelf_id>/toggle-status/', views.admin_toggle_shelf_status, name='admin_toggle_shelf_status'),
+    
     # Banners
     path('admin/banners/', views.admin_get_all_banners, name='admin_get_all_banners'),
     path('admin/banners/create/', views.admin_create_banner, name='admin_create_banner'),
@@ -104,4 +111,23 @@ urlpatterns = [
     # Inventory Alert APIs
     path('inventory/low-stock/', views.get_low_stock_products, name='get_low_stock_products'),
     path('inventory/expiring/', views.get_expiring_products, name='get_expiring_products'),
+    
+    # Product Batch Management APIs
+    path('admin/products/<str:product_id>/batches/', views.get_product_batches, name='get_product_batches'),
+    path('admin/products/<str:product_id>/batches/create/', views.create_product_batch, name='create_product_batch'),
+    path('admin/batches/<str:batch_id>/', views.update_product_batch, name='update_product_batch'),
+    path('admin/batches/<str:batch_id>/delete/', views.delete_product_batch, name='delete_product_batch'),
+    
+    # Expense Management APIs
+    path('admin/expenses/', views.admin_get_all_expenses, name='admin_get_all_expenses'),
+    path('admin/expenses/create/', views.admin_create_expense, name='admin_create_expense'),
+    path('admin/expenses/<str:expense_id>/', views.admin_update_expense, name='admin_update_expense'),
+    path('admin/expenses/<str:expense_id>/delete/', views.admin_delete_expense, name='admin_delete_expense'),
+    path('admin/expenses/<str:expense_id>/update-status/', views.admin_update_expense_status, name='admin_update_expense_status'),
+    
+    # Financial Overview API
+    path('admin/financial-overview/', views.get_financial_overview, name='get_financial_overview'),
+    
+    # Reports & Analytics API
+    path('admin/reports/', views.get_reports_analytics, name='get_reports_analytics'),
 ] 

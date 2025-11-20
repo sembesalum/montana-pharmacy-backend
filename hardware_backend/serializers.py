@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, Banner, HardwareOTP, Order, OrderItem,
-    Customer, Shelf, ProductLocation, Sale, SaleItem
+    Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem,
+    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense
 )
 import random
 import string
@@ -103,11 +103,25 @@ class ProductTypeSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'category_id': 'Category not found'})
         return super().update(instance, validated_data)
 
+class ProductBatchSerializer(serializers.ModelSerializer):
+    """Serializer for product batches"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    
+    class Meta:
+        model = ProductBatch
+        fields = [
+            'batch_id', 'product', 'product_name', 'batch_number', 'supplier',
+            'cost_price', 'selling_price', 'quantity_received', 'quantity_remaining',
+            'expiry_date', 'received_date', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['batch_id', 'received_date', 'created_at', 'updated_at']
+
 class ProductSerializer(serializers.ModelSerializer):
     """Serializer for products"""
     category_name = serializers.CharField(source='category.name', read_only=True)
     brand_name = serializers.CharField(source='brand.name', read_only=True)
     product_type_name = serializers.CharField(source='product_type.name', read_only=True)
+    batches = ProductBatchSerializer(many=True, read_only=True)
     
     class Meta:
         model = Product
@@ -116,7 +130,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'brand', 'brand_name',
             'product_type', 'product_type_name', 'subtype', 'size',
             'color', 'material', 'weight', 'dimensions', 'is_active',
-            'is_featured', 'stock_quantity', 'created_at'
+            'is_featured', 'stock_quantity', 'minimum_stock', 'batches', 'created_at'
         ]
         read_only_fields = ['product_id', 'created_at']
 
@@ -312,6 +326,12 @@ class CustomerSearchSerializer(serializers.ModelSerializer):
         model = Customer
         fields = ['customer_id', 'name', 'phone']
 
+class UserAsCustomerSerializer(serializers.Serializer):
+    """Serializer to convert BusinessUser to customer-like format"""
+    customer_id = serializers.CharField()
+    name = serializers.CharField()
+    phone = serializers.CharField()
+
 
 class ShelfSerializer(serializers.ModelSerializer):
     class Meta:
@@ -334,6 +354,76 @@ class SaleItemSerializer(serializers.ModelSerializer):
         model = SaleItem
         fields = ['sale_item_id', 'product', 'product_name', 'quantity', 'unit_price', 'total_price', 'created_at']
         read_only_fields = ['sale_item_id', 'total_price', 'created_at']
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+    approved_by_name = serializers.SerializerMethodField(read_only=True)
+    created_by = serializers.CharField(write_only=True, required=False, allow_null=True)
+    approved_by = serializers.CharField(write_only=True, required=False, allow_null=True)
+    created_by_id = serializers.SerializerMethodField(read_only=True)
+    approved_by_id = serializers.SerializerMethodField(read_only=True)
+    
+    def get_created_by_name(self, obj):
+        return obj.created_by.business_name if obj.created_by else None
+    
+    def get_approved_by_name(self, obj):
+        return obj.approved_by.business_name if obj.approved_by else None
+    
+    def get_created_by_id(self, obj):
+        return obj.created_by.user_id if obj.created_by else None
+    
+    def get_approved_by_id(self, obj):
+        return obj.approved_by.user_id if obj.approved_by else None
+    
+    class Meta:
+        model = Expense
+        fields = [
+            'expense_id', 'title', 'description', 'amount', 'category', 
+            'status', 'expense_date', 'created_by', 'created_by_id', 'created_by_name',
+            'approved_by', 'approved_by_id', 'approved_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['expense_id', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        created_by_id = validated_data.pop('created_by', None)
+        approved_by_id = validated_data.pop('approved_by', None)
+        
+        if created_by_id:
+            try:
+                created_by = BusinessUser.objects.get(user_id=created_by_id)
+                validated_data['created_by'] = created_by
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        if approved_by_id:
+            try:
+                approved_by = BusinessUser.objects.get(user_id=approved_by_id)
+                validated_data['approved_by'] = approved_by
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        created_by_id = validated_data.pop('created_by', None)
+        approved_by_id = validated_data.pop('approved_by', None)
+        
+        if created_by_id:
+            try:
+                created_by = BusinessUser.objects.get(user_id=created_by_id)
+                validated_data['created_by'] = created_by
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        if approved_by_id:
+            try:
+                approved_by = BusinessUser.objects.get(user_id=approved_by_id)
+                validated_data['approved_by'] = approved_by
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        return super().update(instance, validated_data)
 
 
 class SaleSerializer(serializers.ModelSerializer):
@@ -362,6 +452,8 @@ class CreateSaleSerializer(serializers.Serializer):
     payment_method = serializers.ChoiceField(choices=Sale.PAYMENT_METHOD_CHOICES, default='CASH')
     payment_status = serializers.ChoiceField(choices=Sale.PAYMENT_STATUS_CHOICES, default='PAID')
     discount = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    salesperson_name = serializers.CharField(required=False, allow_blank=True)
+    salesperson = serializers.CharField(required=False, allow_blank=True)  # User ID
     
     def validate_items(self, value):
         if not value:
@@ -380,6 +472,7 @@ class CreateSaleSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         from .models import Product, Customer, BusinessUser
+        from decimal import Decimal
         
         # Get or create customer
         customer = None
@@ -389,16 +482,30 @@ class CreateSaleSerializer(serializers.Serializer):
             except Customer.DoesNotExist:
                 pass
         
-        # Create sale
+        # Get salesperson if user ID is provided
+        salesperson = None
+        if validated_data.get('salesperson'):
+            try:
+                salesperson = BusinessUser.objects.get(user_id=validated_data['salesperson'])
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        # Get salesperson name
+        salesperson_name = validated_data.get('salesperson_name', '')
+        if not salesperson_name and salesperson:
+            salesperson_name = salesperson.business_name
+        
+        # Create sale with initial total_amount as Decimal
         sale = Sale.objects.create(
             customer=customer,
-            customer_name=validated_data.get('customer_name', ''),
-            customer_phone=validated_data.get('customer_phone', ''),
-            payment_method=validated_data['payment_method'],
-            payment_status=validated_data['payment_status'],
-            discount=validated_data['discount'],
-            salesperson_name=validated_data.get('salesperson_name', ''),
-            total_amount=0  # Will be calculated
+            customer_name=validated_data.get('customer_name', '') or '',
+            customer_phone=validated_data.get('customer_phone', '') or '',
+            payment_method=validated_data.get('payment_method', 'CASH'),
+            payment_status=validated_data.get('payment_status', 'PAID'),
+            discount=Decimal(str(validated_data.get('discount', 0))),
+            salesperson=salesperson,
+            salesperson_name=salesperson_name,
+            total_amount=Decimal('0.00')  # Will be calculated later
         )
         
         total_amount = 0
@@ -411,7 +518,11 @@ class CreateSaleSerializer(serializers.Serializer):
                 # Check stock availability
                 if product.stock_quantity < item_data['quantity']:
                     sale.delete()
-                    raise serializers.ValidationError(f"Insufficient stock for {product.name}. Available: {product.stock_quantity}")
+                    raise serializers.ValidationError(f"Insufficient stock for {product.name}. Available: {product.stock_quantity}, Requested: {item_data['quantity']}")
+                
+                # Calculate total price
+                from decimal import Decimal
+                item_total_price = Decimal(str(product.price)) * Decimal(str(item_data['quantity']))
                 
                 # Create sale item
                 sale_item = SaleItem.objects.create(
@@ -419,21 +530,28 @@ class CreateSaleSerializer(serializers.Serializer):
                     product=product,
                     product_name=product.name,
                     quantity=item_data['quantity'],
-                    unit_price=product.price
+                    unit_price=product.price,
+                    total_price=item_total_price
                 )
                 
                 # Update product stock
                 product.stock_quantity -= item_data['quantity']
+                if product.stock_quantity < 0:
+                    product.stock_quantity = 0
                 product.save()
                 
-                total_amount += sale_item.total_price
+                total_amount += float(sale_item.total_price)
                 
             except Product.DoesNotExist:
                 sale.delete()
                 raise serializers.ValidationError(f"Product with ID {item_data['product_id']} not found")
         
-        # Update sale total
-        sale.total_amount = total_amount - validated_data['discount']
+        # Update sale total (ensure discount is Decimal)
+        discount_amount = Decimal(str(validated_data.get('discount', 0)))
+        sale_total = Decimal(str(total_amount)) - discount_amount
+        if sale_total < 0:
+            sale_total = Decimal('0.00')
+        sale.total_amount = sale_total
         sale.save()
         
         return sale

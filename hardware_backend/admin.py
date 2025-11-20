@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, Banner, HardwareOTP, Order, OrderItem
+    Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem
 )
 
 @admin.register(BusinessUser)
@@ -35,6 +35,14 @@ class ProductTypeAdmin(admin.ModelAdmin):
     search_fields = ['name', 'description', 'category__name']
     readonly_fields = ['type_id', 'created_at', 'updated_at']
     ordering = ['category__name', 'name']
+
+@admin.register(ProductBatch)
+class ProductBatchAdmin(admin.ModelAdmin):
+    list_display = ['batch_id', 'product', 'batch_number', 'supplier', 'quantity_received', 'quantity_remaining', 'expiry_date', 'is_active']
+    list_filter = ['is_active', 'expiry_date', 'received_date']
+    search_fields = ['batch_number', 'supplier', 'product__name']
+    readonly_fields = ['batch_id', 'received_date', 'created_at', 'updated_at']
+    ordering = ['-received_date']
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
