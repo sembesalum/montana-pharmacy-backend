@@ -730,7 +730,7 @@ def create_packages():
     
     packages = {}
     for package_data in packages_data:
-        package, created = Package.objects.get_or_create(
+        package, created = Package.packages.get_or_create(
             name=package_data['name'],
             defaults=package_data
         )
@@ -808,7 +808,7 @@ def create_sample_data():
         print(f"   - Order Items: {OrderItem.objects.count()}")
         print(f"   - Expenses: {Expense.objects.count()}")
         print(f"   - Banners: {Banner.objects.count()}")
-        print(f"   - Packages: {Package.objects.count()}")
+        print(f"   - Packages: {Package.packages.count()}")
         print(f"\n🚀 You can now test the admin dashboard with comprehensive data!")
         
     except Exception as e:
