@@ -315,54 +315,29 @@ def home_page(request):
     """
     try:
         # Get active categories, ordered by name for consistent ordering
-        # If no active categories, return all categories (for debugging)
         categories = ProductCategory.objects.filter(is_active=True).order_by('name')
-        if not categories.exists():
-            # Fallback: return all categories if none are active
-            categories = ProductCategory.objects.all().order_by('name')
-        
         categories_serializer = ProductCategorySerializer(categories, many=True)
-        # Ensure it's a list for JSON serialization
-        categories_data = list(categories_serializer.data) if categories_serializer.data else []
         
         # Get active brands, ordered by name
         brands = Brand.objects.filter(is_active=True).order_by('name')
         brands_serializer = BrandSerializer(brands, many=True)
-        brands_data = list(brands_serializer.data) if brands_serializer.data else []
         
         # Get active banners, ordered by order field and creation date
         banners = Banner.objects.filter(is_active=True).order_by('order', '-created_at')
         banners_serializer = BannerSerializer(banners, many=True)
-        banners_data = list(banners_serializer.data) if banners_serializer.data else []
         
-        # Ensure we always return arrays, never None
-        response_data = {
+        return Response({
             'success': True,
             'data': {
-                'categories': categories_data,
-                'brands': brands_data,
-                'banners': banners_data
+                'categories': categories_serializer.data,
+                'brands': brands_serializer.data,
+                'banners': banners_serializer.data
             }
-        }
-        
-        # Log for debugging (remove in production)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Home page request - Categories: {len(categories_data)}, Brands: {len(brands_data)}, Banners: {len(banners_data)}")
-        
-        return Response(response_data, status=status.HTTP_200_OK)
+        }, status=status.HTTP_200_OK)
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in home_page: {str(e)}", exc_info=True)
         return Response({
             'success': False,
-            'message': f'Failed to fetch home page data: {str(e)}',
-            'data': {
-                'categories': [],
-                'brands': [],
-                'banners': []
-            }
+            'message': f'Failed to fetch home page data: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
