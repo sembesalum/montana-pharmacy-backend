@@ -307,18 +307,23 @@ def resend_otp(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def home_page(request):
-    """Get home page data - categories, brands, and banners"""
+    """Get home page data - categories, brands, and banners
+    
+    This endpoint is used by the mobile app to fetch categories.
+    Response format: { success: true, data: { categories: [...], brands: [...], banners: [...] } }
+    Categories are accessible at body['data']['categories']
+    """
     try:
-        # Get active categories
-        categories = ProductCategory.objects.filter(is_active=True)
+        # Get active categories, ordered by name for consistent ordering
+        categories = ProductCategory.objects.filter(is_active=True).order_by('name')
         categories_serializer = ProductCategorySerializer(categories, many=True)
         
-        # Get active brands
-        brands = Brand.objects.filter(is_active=True)
+        # Get active brands, ordered by name
+        brands = Brand.objects.filter(is_active=True).order_by('name')
         brands_serializer = BrandSerializer(brands, many=True)
         
-        # Get active banners
-        banners = Banner.objects.filter(is_active=True)
+        # Get active banners, ordered by order field and creation date
+        banners = Banner.objects.filter(is_active=True).order_by('order', '-created_at')
         banners_serializer = BannerSerializer(banners, many=True)
         
         return Response({
@@ -342,16 +347,16 @@ def home_page_with_user(request):
     try:
         user_id = request.data.get('user_id')
         
-        # Get active categories
-        categories = ProductCategory.objects.filter(is_active=True)
+        # Get active categories, ordered by name for consistent ordering
+        categories = ProductCategory.objects.filter(is_active=True).order_by('name')
         categories_serializer = ProductCategorySerializer(categories, many=True)
         
-        # Get active brands
-        brands = Brand.objects.filter(is_active=True)
+        # Get active brands, ordered by name
+        brands = Brand.objects.filter(is_active=True).order_by('name')
         brands_serializer = BrandSerializer(brands, many=True)
         
-        # Get active banners
-        banners = Banner.objects.filter(is_active=True)
+        # Get active banners, ordered by order field and creation date
+        banners = Banner.objects.filter(is_active=True).order_by('order', '-created_at')
         banners_serializer = BannerSerializer(banners, many=True)
         
         # Initialize response data
