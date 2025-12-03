@@ -72,12 +72,23 @@ def create_business_users():
     
     users = {}
     for user_data in users_data:
+        # Create a copy to avoid modifying the original
+        user_data_copy = user_data.copy()
+        password = user_data_copy.pop('password')  # Extract password
+        
         user, created = BusinessUser.objects.get_or_create(
-            phone_number=user_data['phone_number'],
-            defaults=user_data
+            phone_number=user_data_copy['phone_number'],
+            defaults=user_data_copy
         )
+        
+        # Update password if user already exists or if we need to ensure it's set
+        if not created or (created and not user.check_password(password)):
+            user.password = password  # Will be hashed by save() method
+            user.is_verified = user_data_copy.get('is_verified', True)
+            user.save()
+        
         users[user_data['phone_number']] = user
-        print(f"✅ {'Created' if created else 'Found'} user: {user.business_name}")
+        print(f"✅ {'Created' if created else 'Updated'} user: {user.business_name} (Password: {password})")
     
     return users
 

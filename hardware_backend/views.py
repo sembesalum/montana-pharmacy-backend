@@ -99,17 +99,34 @@ def register_business_user(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_business_user(request):
-    """Login business user"""
+    """Login business user with phone number and password"""
     try:
         serializer = BusinessUserLoginSerializer(data=request.data)
         if serializer.is_valid():
-            phone_number = serializer.validated_data['phone_number']
+            phone_number = serializer.validated_data['phone_number'].strip()
             password = serializer.validated_data['password']
             
-            # Find user by phone number
+            # Normalize phone number - ensure it starts with + if it doesn't
+            # Try to find user with exact phone number first
+            user = None
             try:
                 user = BusinessUser.objects.get(phone_number=phone_number)
             except BusinessUser.DoesNotExist:
+                # Try with + prefix if not present
+                if not phone_number.startswith('+'):
+                    try:
+                        user = BusinessUser.objects.get(phone_number=f"+{phone_number}")
+                    except BusinessUser.DoesNotExist:
+                        pass
+                # Try without + prefix if present
+                elif phone_number.startswith('+'):
+                    try:
+                        user = BusinessUser.objects.get(phone_number=phone_number[1:])
+                    except BusinessUser.DoesNotExist:
+                        pass
+            
+            # If user not found, return error
+            if not user:
                 return Response({
                     'success': False,
                     'message': 'Invalid phone number or password'
