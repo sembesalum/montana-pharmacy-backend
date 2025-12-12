@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
-    Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem
+    Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem,
+    Invoice, InvoiceItem
 )
 
 @admin.register(BusinessUser)
@@ -123,3 +124,43 @@ class OrderAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user')
+
+
+@admin.register(InvoiceItem)
+class InvoiceItemAdmin(admin.ModelAdmin):
+    list_display = ['invoice_item_id', 'invoice', 'product_name', 'quantity', 'unit_price', 'total_price']
+    list_filter = ['created_at', 'pack_type']
+    search_fields = ['product_name', 'invoice__invoice_number', 'invoice__invoice_id']
+    readonly_fields = ['invoice_item_id', 'total_price', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ['invoice_id', 'invoice_number', 'order', 'customer_name', 'total_amount', 'status', 'invoice_date', 'created_at']
+    list_filter = ['status', 'payment_status', 'invoice_date', 'created_at']
+    search_fields = ['invoice_id', 'invoice_number', 'customer_name', 'customer_phone', 'order__order_id']
+    readonly_fields = ['invoice_id', 'invoice_number', 'total_amount', 'subtotal', 'tax_amount', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Invoice Information', {
+            'fields': ('invoice_id', 'invoice_number', 'order', 'invoice_date', 'due_date', 'status')
+        }),
+        ('Customer Information', {
+            'fields': ('customer_name', 'customer_phone', 'customer_address', 'customer_tin')
+        }),
+        ('Financial Information', {
+            'fields': ('subtotal', 'tax_amount', 'shipping_amount', 'discount_amount', 'total_amount', 'payment_method', 'payment_status')
+        }),
+        ('Additional Information', {
+            'fields': ('notes', 'terms_and_conditions')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('order', 'order__user')

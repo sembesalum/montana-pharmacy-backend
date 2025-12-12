@@ -90,6 +90,13 @@ urlpatterns = [
     path('admin/orders/', views.admin_get_all_orders, name='admin_get_all_orders'),
     path('admin/orders/status/<str:status>/', views.admin_get_orders_by_status, name='admin_get_orders_by_status'),
     
+    # Invoice Management APIs
+    path('invoices/create-from-order/<str:order_id>/', views.create_invoice_from_order, name='create_invoice_from_order'),
+    path('invoices/', views.get_all_invoices, name='get_all_invoices'),
+    path('invoices/<str:invoice_id>/', views.get_invoice_details, name='get_invoice_details'),
+    path('invoices/<str:invoice_id>/update/', views.update_invoice, name='update_invoice'),
+    path('invoices/<str:invoice_id>/delete/', views.delete_invoice, name='delete_invoice'),
+    
     # Customer Management APIs
     path('customers/', views.get_customers, name='get_customers'),
     path('customers/search/', views.search_customers, name='search_customers'),

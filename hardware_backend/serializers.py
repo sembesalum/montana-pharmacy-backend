@@ -2,7 +2,8 @@ from rest_framework import serializers
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
     Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem,
-    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense
+    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense,
+    Invoice, InvoiceItem
 )
 import random
 import string
@@ -568,4 +569,108 @@ class ProductWithLocationSerializer(serializers.ModelSerializer):
             'minimum_stock', 'expiry_date', 'category_name', 'locations', 
             'is_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['product_id', 'created_at', 'updated_at'] 
+        read_only_fields = ['product_id', 'created_at', 'updated_at']
+
+
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    """Serializer for invoice items"""
+    product_id = serializers.CharField(source='product.product_id', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = InvoiceItem
+        fields = [
+            'invoice_item_id', 'product_id', 'product_name', 'product_description',
+            'product_image', 'category', 'quantity', 'unit_price', 'total_price',
+            'pack_type', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['invoice_item_id', 'created_at', 'updated_at']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    """Serializer for invoices with items"""
+    invoice_items = InvoiceItemSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    order_id = serializers.CharField(source='order.order_id', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'invoice_id', 'invoice_number', 'order_id', 'invoice_date', 'due_date',
+            'status', 'status_display', 'customer_name', 'customer_phone',
+            'customer_address', 'customer_tin', 'subtotal', 'tax_amount',
+            'shipping_amount', 'discount_amount', 'total_amount', 'payment_method',
+            'payment_status', 'notes', 'terms_and_conditions', 'invoice_items',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['invoice_id', 'invoice_number', 'created_at', 'updated_at']
+
+
+class CreateInvoiceFromOrderSerializer(serializers.Serializer):
+    """Serializer for creating invoice from order"""
+    invoice_date = serializers.DateField(required=False)
+    due_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    terms_and_conditions = serializers.CharField(required=False, allow_blank=True)
+
+
+class UpdateInvoiceSerializer(serializers.ModelSerializer):
+    """Serializer for updating invoices"""
+    invoice_items = serializers.ListField(
+        child=serializers.DictField(),
+        required=False
+    )
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'invoice_date', 'due_date', 'status', 'customer_name', 'customer_phone',
+            'customer_address', 'customer_tin', 'shipping_amount', 'discount_amount',
+            'payment_method', 'payment_status', 'notes', 'terms_and_conditions',
+            'invoice_items'
+        ]
+    
+    def validate_status(self, value):
+        """Prevent editing paid or cancelled invoices"""
+        if self.instance and self.instance.status in ['paid', 'cancelled']:
+            if value != self.instance.status:
+                raise serializers.ValidationError(
+                    f"Cannot change status of {self.instance.status} invoice"
+                )
+        return value
+    
+    def update(self, instance, validated_data):
+        invoice_items_data = validated_data.pop('invoice_items', None)
+        
+        # Update invoice fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Update invoice items if provided
+        if invoice_items_data is not None:
+            # Delete existing items
+            instance.invoice_items.all().delete()
+            
+            # Create new items
+            for item_data in invoice_items_data:
+                product_id = item_data.get('product_id')
+                product = None
+                if product_id:
+                    try:
+                        product = Product.objects.get(product_id=product_id)
+                    except Product.DoesNotExist:
+                        pass
+                
+                InvoiceItem.objects.create(
+                    invoice=instance,
+                    product=product,
+                    product_name=item_data.get('product_name', ''),
+                    product_description=item_data.get('product_description', ''),
+                    product_image=item_data.get('product_image', ''),
+                    category=item_data.get('category', ''),
+                    quantity=item_data.get('quantity', 1),
+                    unit_price=item_data.get('unit_price', 0),
+                    pack_type=item_data.get('pack_type', 'Piece')
+                )
+        
+        instance.save()
+        return instance 

@@ -450,3 +450,119 @@ class Expense(models.Model):
     
     def __str__(self):
         return f"{self.title} - TSh {self.amount}"
+
+
+class Invoice(models.Model):
+    """Invoice model created from orders"""
+    INVOICE_STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+        ('paid', 'Paid'),
+        ('overdue', 'Overdue'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    invoice_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice', null=True, blank=True)
+    
+    # Invoice details
+    invoice_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    invoice_date = models.DateField()
+    due_date = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=INVOICE_STATUS_CHOICES, default='draft')
+    
+    # Customer information (copied from order)
+    customer_name = models.CharField(max_length=200)
+    customer_phone = models.CharField(max_length=20)
+    customer_address = models.TextField()
+    customer_tin = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Financial details
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    shipping_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    
+    # Payment information
+    payment_method = models.CharField(max_length=50, blank=True, null=True)
+    payment_status = models.CharField(max_length=20, default='pending')
+    
+    # Additional information
+    notes = models.TextField(blank=True, null=True)
+    terms_and_conditions = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "invoices"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Invoice {self.invoice_number or self.invoice_id} - {self.customer_name}"
+    
+    def generate_invoice_number(self):
+        """Generate a human-readable invoice number"""
+        if not self.invoice_number:
+            from datetime import datetime
+            date_str = datetime.now().strftime('%Y%m%d')
+            # Get the count of invoices for today
+            today_invoices = Invoice.objects.filter(created_at__date=datetime.now().date()).count()
+            self.invoice_number = f"INV-{date_str}-{today_invoices + 1:04d}"
+            self.save()
+        return self.invoice_number
+    
+    def calculate_totals(self):
+        """Calculate invoice totals from invoice items"""
+        subtotal = sum(item.total_price for item in self.invoice_items.all())
+        self.subtotal = subtotal
+        
+        # Calculate tax (assuming 18% VAT)
+        self.tax_amount = (subtotal - self.discount_amount) * Decimal('0.18')
+        
+        # Total amount
+        self.total_amount = self.subtotal - self.discount_amount + self.tax_amount + self.shipping_amount
+        self.save()
+
+
+class InvoiceItem(models.Model):
+    """Individual items in an invoice"""
+    invoice_item_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='invoice_items')
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Item details
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Product snapshot (in case product details change later)
+    product_name = models.CharField(max_length=200)
+    product_description = models.TextField(blank=True, null=True)
+    product_image = models.CharField(max_length=500, blank=True, null=True)
+    category = models.CharField(max_length=100, blank=True, null=True)
+    
+    PACK_TYPE_CHOICES = [
+        ('Piece', 'Piece'),
+        ('Dozen', 'Dozen'),
+    ]
+    pack_type = models.CharField(max_length=10, choices=PACK_TYPE_CHOICES, default='Piece')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "invoice_items"
+    
+    def __str__(self):
+        return f"{self.quantity}x {self.product_name} - Invoice {self.invoice.invoice_number or self.invoice.invoice_id}"
+    
+    def save(self, *args, **kwargs):
+        # Calculate total price
+        self.total_price = self.quantity * self.unit_price
+        super().save(*args, **kwargs)
+        # Recalculate invoice totals
+        if self.invoice:
+            self.invoice.calculate_totals()

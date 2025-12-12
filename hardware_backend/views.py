@@ -5,7 +5,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime, date
+from decimal import Decimal
 import random
 import string
 import json
@@ -15,7 +16,8 @@ from .utils import handle_image_upload
 from .models import (
     BusinessUser, ProductCategory, Brand, ProductType, 
     Product, ProductBatch, Banner, HardwareOTP, Order, OrderItem,
-    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense
+    Customer, Shelf, ProductLocation, Sale, SaleItem, Expense,
+    Invoice, InvoiceItem
 )
 from .serializers import (
     BusinessUserRegistrationSerializer, BusinessUserLoginSerializer,
@@ -26,7 +28,9 @@ from .serializers import (
     OrderItemSerializer, OrderResponseSerializer, OrderItemResponseSerializer,
     CustomerSerializer, CustomerSearchSerializer, ShelfSerializer,
     ProductLocationSerializer, SaleSerializer, SaleItemSerializer,
-    CreateSaleSerializer, ProductWithLocationSerializer, ExpenseSerializer
+    CreateSaleSerializer, ProductWithLocationSerializer, ExpenseSerializer,
+    InvoiceSerializer, InvoiceItemSerializer, CreateInvoiceFromOrderSerializer,
+    UpdateInvoiceSerializer
 )
 
 def generate_otp():
@@ -3412,4 +3416,234 @@ def get_reports_analytics(request):
         return Response({
             'success': False,
             'message': f'Failed to fetch reports data: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Invoice Management Views
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_invoice_from_order(request, order_id):
+    """Create an invoice from an order"""
+    try:
+        # Get order
+        try:
+            order = Order.objects.select_related('user').prefetch_related('order_items__product').get(order_id=order_id)
+        except Order.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if invoice already exists for this order
+        if hasattr(order, 'invoice'):
+            return Response({
+                'success': False,
+                'message': 'Invoice already exists for this order',
+                'invoice_id': order.invoice.invoice_id
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate request data
+        serializer = CreateInvoiceFromOrderSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get invoice date (default to today)
+        invoice_date = serializer.validated_data.get('invoice_date', date.today())
+        due_date = serializer.validated_data.get('due_date')
+        
+        # Calculate due date if not provided (default to 30 days from invoice date)
+        if not due_date:
+            due_date = invoice_date + timedelta(days=30)
+        
+        # Create invoice
+        invoice = Invoice.objects.create(
+            order=order,
+            invoice_date=invoice_date,
+            due_date=due_date,
+            customer_name=order.user.business_name,
+            customer_phone=order.user.phone_number,
+            customer_address=order.delivery_address,
+            customer_tin=order.user.tin_number,
+            subtotal=order.subtotal,
+            tax_amount=order.tax_amount,
+            shipping_amount=order.shipping_amount,
+            total_amount=order.total_amount,
+            payment_method=order.payment_method,
+            payment_status=order.payment_status,
+            notes=serializer.validated_data.get('notes', ''),
+            terms_and_conditions=serializer.validated_data.get('terms_and_conditions', ''),
+            status='draft'
+        )
+        
+        # Generate invoice number
+        invoice.generate_invoice_number()
+        
+        # Create invoice items from order items
+        for order_item in order.order_items.all():
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                product=order_item.product,
+                product_name=order_item.product_name,
+                product_description=order_item.product_description,
+                product_image=order_item.product_image,
+                category=order_item.category,
+                quantity=order_item.quantity,
+                unit_price=order_item.unit_price,
+                total_price=order_item.total_price,
+                pack_type=order_item.pack_type
+            )
+        
+        # Serialize and return
+        invoice_serializer = InvoiceSerializer(invoice)
+        
+        return Response({
+            'success': True,
+            'message': 'Invoice created successfully from order',
+            'data': invoice_serializer.data
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to create invoice: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_all_invoices(request):
+    """Get all invoices"""
+    try:
+        invoices = Invoice.objects.select_related('order', 'order__user').prefetch_related('invoice_items__product').all()
+        invoices_serializer = InvoiceSerializer(invoices, many=True)
+        
+        return Response({
+            'success': True,
+            'data': invoices_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch invoices: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_invoice_details(request, invoice_id):
+    """Get invoice details"""
+    try:
+        try:
+            invoice = Invoice.objects.select_related('order', 'order__user').prefetch_related('invoice_items__product').get(invoice_id=invoice_id)
+        except Invoice.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Invoice not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        invoice_serializer = InvoiceSerializer(invoice)
+        
+        return Response({
+            'success': True,
+            'data': invoice_serializer.data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to fetch invoice details: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([AllowAny])
+def update_invoice(request, invoice_id):
+    """Update an invoice"""
+    try:
+        try:
+            invoice = Invoice.objects.get(invoice_id=invoice_id)
+        except Invoice.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Invoice not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if invoice can be edited
+        if invoice.status in ['paid', 'cancelled']:
+            return Response({
+                'success': False,
+                'message': f'Cannot edit invoice with status: {invoice.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update invoice
+        serializer = UpdateInvoiceSerializer(invoice, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated_invoice = serializer.save()
+            
+            # Recalculate totals
+            updated_invoice.calculate_totals()
+            
+            invoice_serializer = InvoiceSerializer(updated_invoice)
+            
+            return Response({
+                'success': True,
+                'message': 'Invoice updated successfully',
+                'data': invoice_serializer.data
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update invoice: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_invoice(request, invoice_id):
+    """Delete an invoice"""
+    try:
+        try:
+            invoice = Invoice.objects.get(invoice_id=invoice_id)
+        except Invoice.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Invoice not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if invoice can be deleted
+        if invoice.status in ['paid', 'sent']:
+            return Response({
+                'success': False,
+                'message': f'Cannot delete invoice with status: {invoice.status}. Only draft or cancelled invoices can be deleted.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        invoice_id_str = invoice.invoice_id
+        invoice_number = invoice.invoice_number
+        
+        # Delete invoice (cascade will delete invoice items)
+        invoice.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Invoice deleted successfully',
+            'deleted_invoice': {
+                'invoice_id': invoice_id_str,
+                'invoice_number': invoice_number
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to delete invoice: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
