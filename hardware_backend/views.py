@@ -3586,11 +3586,73 @@ def update_invoice(request, invoice_id):
             # Recalculate totals
             updated_invoice.calculate_totals()
             
+            # Update the related order if it exists
+            if updated_invoice.order:
+                order = updated_invoice.order
+                
+                # Update order delivery information from invoice customer info
+                order.delivery_address = updated_invoice.customer_address
+                order.delivery_phone = updated_invoice.customer_phone
+                
+                # Update order payment information
+                if updated_invoice.payment_method:
+                    order.payment_method = updated_invoice.payment_method
+                if updated_invoice.payment_status:
+                    order.payment_status = updated_invoice.payment_status
+                
+                # Update order items to match invoice items
+                # First, delete existing order items
+                order.order_items.all().delete()
+                
+                # Create new order items from invoice items
+                for invoice_item in updated_invoice.invoice_items.all():
+                    # Get the product if it exists
+                    product = invoice_item.product
+                    
+                    # OrderItem requires a product, so if invoice item doesn't have one,
+                    # we need to find a product by name or create a dummy one
+                    # For now, we'll try to find by name, or use the first product as fallback
+                    if not product and invoice_item.product_name:
+                        try:
+                            # Try to find product by name
+                            product = Product.objects.filter(name__icontains=invoice_item.product_name).first()
+                        except:
+                            pass
+                    
+                    # If still no product, we can't create OrderItem without it
+                    # So we'll skip items without products or use a default
+                    if not product:
+                        # Skip items without products - they can't be added to orders
+                        continue
+                    
+                    # Create order item
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        product_name=invoice_item.product_name,
+                        product_description=invoice_item.product_description or '',
+                        product_image=invoice_item.product_image or '',
+                        category=invoice_item.category or '',
+                        quantity=invoice_item.quantity,
+                        unit_price=invoice_item.unit_price,
+                        total_price=invoice_item.total_price,
+                        pack_type=invoice_item.pack_type
+                    )
+                
+                # Update order totals to match invoice totals
+                order.subtotal = updated_invoice.subtotal
+                order.tax_amount = updated_invoice.tax_amount
+                order.shipping_amount = updated_invoice.shipping_amount
+                order.total_amount = updated_invoice.total_amount
+                
+                # Save the order
+                order.save()
+            
             invoice_serializer = InvoiceSerializer(updated_invoice)
             
             return Response({
                 'success': True,
-                'message': 'Invoice updated successfully',
+                'message': 'Invoice and related order updated successfully',
                 'data': invoice_serializer.data
             }, status=status.HTTP_200_OK)
         else:
