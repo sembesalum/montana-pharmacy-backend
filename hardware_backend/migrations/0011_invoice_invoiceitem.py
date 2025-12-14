@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('hardware_backend', '0010_alter_saleitem_total_price_alter_saleitem_unit_price_and_more'),
+        ('hardware_backend', '0001_initial'),
     ]
 
     operations = [
