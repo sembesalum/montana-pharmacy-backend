@@ -207,6 +207,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom user model for hardware backend
 # AUTH_USER_MODEL = 'hardware_backend.BusinessUser'
 
+# OTP and SMS Configuration
+ENABLE_OTP_LOGIN = os.getenv('ENABLE_OTP_LOGIN', 'True').lower() == 'true'  # Enable OTP for login by default
+OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '15'))  # OTP expires in 15 minutes
+
+# SMS API Configuration (mShastra)
+SMS_API_URL = os.getenv('SMS_API_URL', 'https://mshastra.com/sendsms_api_json.aspx')
+SMS_USERNAME = os.getenv('SMS_USERNAME', 'YOUR_SMS_USERNAME')  # Update with your SMS username
+SMS_PASSWORD = os.getenv('SMS_PASSWORD', 'YOUR_SMS_PASSWORD')  # Update with your SMS password
+SMS_SENDER = os.getenv('SMS_SENDER', 'YourApp')  # Update with your approved sender name
+
 # Security settings for production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True

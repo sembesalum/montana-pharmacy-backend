@@ -58,8 +58,32 @@ cover/
 # Django stuff:
 *.log
 local_settings.py
+
+# Database files
+*.sqlite3
+*.sqlite3-journal
+*.db
+*.sqlite
+*.sql
 db.sqlite3
 db.sqlite3-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# MySQL
+*.mysql
+*.mysql-query
+*.mysqldump
+
+# PostgreSQL
+*.pgsql
+*.postgres
+*.pgdump
+
+# Database backups
+*.dump
+*.backup
+*.bak
 
 # Flask stuff:
 instance/

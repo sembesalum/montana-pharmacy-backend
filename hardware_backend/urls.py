@@ -5,6 +5,7 @@ urlpatterns = [
     # User Authentication & Data APIs
     path('register/', views.register_business_user, name='register_business_user'),
     path('login/', views.login_business_user, name='login_business_user'),
+    path('login-verify-otp/', views.login_verify_otp, name='login_verify_otp'),
     path('verify-otp/', views.verify_otp, name='verify_otp'),
     path('resend-otp/', views.resend_otp, name='resend_otp'),
     path('user-data/', views.get_business_user_data, name='get_business_user_data'),

@@ -179,6 +179,15 @@ class HardwareOTP(models.Model):
     
     def __str__(self):
         return f"OTP for {self.phone_number}"
+    
+    def is_expired(self):
+        """Check if OTP has expired"""
+        from django.utils import timezone
+        from django.conf import settings
+        from datetime import timedelta
+        
+        expiry_time = self.created_at + timedelta(minutes=getattr(settings, 'OTP_EXPIRY_MINUTES', 15))
+        return timezone.now() > expiry_time
 
 class Order(models.Model):
     """Order model for user purchases"""

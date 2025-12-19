@@ -10,7 +10,9 @@ from decimal import Decimal
 import random
 import string
 import json
+import requests
 from django.db import models
+from django.conf import settings
 from .utils import handle_image_upload
 
 from .models import (
@@ -34,17 +36,78 @@ from .serializers import (
 )
 
 def generate_otp():
-    """Generate a 4-digit OTP"""
-    return '1234'  # Default OTP for testing
+    """Generate a random 4-digit OTP"""
+    # Generate random 4-digit OTP (1000-9999)
+    otp = random.randint(1000, 9999)
+    
+    # In development, allow test OTPs
+    # In production, always use random OTP
+    if settings.DEBUG:
+        # Allow '1234' as test OTP in development
+        return str(otp)
+    return str(otp)
 
 def send_otp_sms(phone_number, otp):
     """
-    Mock function to send OTP via SMS
-    In production, integrate with SMS service like Twilio, AfricasTalking, etc.
+    Send OTP via SMS using mShastra API
+    Falls back to console print in development if SMS credentials are not configured
     """
-    # TODO: Integrate with actual SMS service
-    print(f"Sending OTP {otp} to {phone_number}")
-    return True
+    # Get SMS configuration from settings
+    sms_username = getattr(settings, 'SMS_USERNAME', None)
+    sms_password = getattr(settings, 'SMS_PASSWORD', None)
+    sms_sender = getattr(settings, 'SMS_SENDER', 'YourApp')
+    sms_api_url = getattr(settings, 'SMS_API_URL', 'https://mshastra.com/sendsms_api_json.aspx')
+    
+    # Check if SMS credentials are configured
+    if not sms_username or sms_username == 'YOUR_SMS_USERNAME' or not sms_password or sms_password == 'YOUR_SMS_PASSWORD':
+        # Fallback to console print in development
+        print(f"[DEV MODE] OTP {otp} for {phone_number} (SMS not configured)")
+        return True
+    
+    # Prepare phone number (ensure it doesn't have + prefix for SMS API)
+    phone_clean = phone_number.replace('+', '').replace(' ', '')
+    
+    # Prepare SMS message
+    message = f"Welcome To Pharmacy Mkononi!\nThank you for using our service.\nYour OTP is {otp}"
+    
+    # Prepare payload for mShastra API
+    payload = json.dumps([{
+        "user": sms_username,
+        "pwd": sms_password,
+        "number": phone_clean,
+        "sender": sms_sender,
+        "msg": message,
+        "language": "Unicode"
+    }])
+    
+    headers = {
+        'Content-Type': 'application/json',
+        "accept": "application/json",
+    }
+    
+    try:
+        # Send SMS via API
+        response = requests.post(sms_api_url, headers=headers, data=payload, timeout=10)
+        response.raise_for_status()
+        json_response = response.json()
+        
+        # Check if SMS was sent successfully
+        # mShastra API typically returns success status in response
+        print(f"SMS sent successfully to {phone_number}: {json_response}")
+        return True
+    except requests.exceptions.RequestException as e:
+        # Log error but don't fail - fallback to console in development
+        print(f"Failed to send SMS to {phone_number}: {str(e)}")
+        if settings.DEBUG:
+            print(f"[DEV MODE] OTP {otp} for {phone_number}")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error sending SMS: {str(e)}")
+        if settings.DEBUG:
+            print(f"[DEV MODE] OTP {otp} for {phone_number}")
+            return True
+        return False
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -103,12 +166,15 @@ def register_business_user(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_business_user(request):
-    """Login business user with phone number and password"""
+    """Login business user with phone number and password - sends OTP for verification"""
     try:
         serializer = BusinessUserLoginSerializer(data=request.data)
         if serializer.is_valid():
             phone_number = serializer.validated_data['phone_number'].strip()
             password = serializer.validated_data['password']
+            
+            # Check if OTP login is enabled
+            enable_otp_login = getattr(settings, 'ENABLE_OTP_LOGIN', True)
             
             # Normalize phone number - ensure it starts with + if it doesn't
             # Try to find user with exact phone number first
@@ -143,7 +209,7 @@ def login_business_user(request):
                     'message': 'Invalid phone number or password'
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Check if user is verified
+            # Check if user is verified (for registration verification)
             if not user.is_verified:
                 return Response({
                     'success': False,
@@ -151,22 +217,46 @@ def login_business_user(request):
                     'needs_verification': True
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Generate a simple token for authentication
-            # In production, use JWT tokens
-            import hashlib
-            import time
-            token_data = f"{user.user_id}:{user.phone_number}:{int(time.time())}"
-            token = hashlib.sha256(token_data.encode()).hexdigest()
+            # If OTP login is disabled, return token directly (backward compatibility)
+            if not enable_otp_login:
+                import hashlib
+                import time
+                token_data = f"{user.user_id}:{user.phone_number}:{int(time.time())}"
+                token = hashlib.sha256(token_data.encode()).hexdigest()
+                
+                user_serializer = BusinessUserSerializer(user)
+                return Response({
+                    'success': True,
+                    'message': 'Login successful',
+                    'data': {
+                        'user': user_serializer.data,
+                        'token': token
+                    }
+                }, status=status.HTTP_200_OK)
             
-            # Return user data with token in the expected format
-            user_serializer = BusinessUserSerializer(user)
+            # OTP login is enabled - generate and send OTP
+            # Generate OTP
+            otp = generate_otp()
+            
+            # Delete existing OTP for this phone number (if any)
+            HardwareOTP.objects.filter(phone_number=phone_number).delete()
+            
+            # Create new OTP record
+            HardwareOTP.objects.create(
+                phone_number=phone_number,
+                otp=otp,
+                is_used=False
+            )
+            
+            # Send OTP via SMS
+            send_otp_sms(phone_number, otp)
+            
+            # Return response indicating OTP is required
             return Response({
                 'success': True,
-                'message': 'Login successful',
-                'data': {
-                    'user': user_serializer.data,
-                    'token': token
-                }
+                'message': 'OTP sent to your phone number. Please verify to complete login.',
+                'needs_otp': True,
+                'phone_number': phone_number
             }, status=status.HTTP_200_OK)
         else:
             return Response({
@@ -199,8 +289,8 @@ def verify_otp(request):
                     'message': 'No OTP found for this phone number'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Check if OTP is expired (15 minutes)
-            if timezone.now() - otp_obj.created_at > timedelta(minutes=15):
+            # Check if OTP is expired using model method
+            if otp_obj.is_expired():
                 return Response({
                     'success': False,
                     'message': 'OTP has expired. Please request a new one.'
@@ -257,6 +347,92 @@ def verify_otp(request):
                 'message': 'Validation error',
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'OTP verification failed: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_verify_otp(request):
+    """Verify OTP to complete login after password verification"""
+    try:
+        phone_number = request.data.get('phone_number', '').strip()
+        otp = request.data.get('otp', '').strip()
+        
+        if not phone_number:
+            return Response({
+                'success': False,
+                'message': 'Phone number is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not otp:
+            return Response({
+                'success': False,
+                'message': 'OTP is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if OTP exists and is valid
+        try:
+            otp_obj = HardwareOTP.objects.get(phone_number=phone_number)
+        except HardwareOTP.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'No OTP found for this phone number. Please request a new one.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if OTP is expired
+        if otp_obj.is_expired():
+            return Response({
+                'success': False,
+                'message': 'OTP has expired. Please request a new one.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if OTP is already used
+        if otp_obj.is_used:
+            return Response({
+                'success': False,
+                'message': 'OTP has already been used. Please request a new one.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify OTP code
+        if otp_obj.otp != otp:
+            return Response({
+                'success': False,
+                'message': 'Invalid OTP code'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark OTP as used
+        otp_obj.is_used = True
+        otp_obj.save()
+        
+        # Get user and generate token
+        try:
+            user = BusinessUser.objects.get(phone_number=phone_number)
+        except BusinessUser.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'User not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate authentication token
+        import hashlib
+        import time
+        token_data = f"{user.user_id}:{user.phone_number}:{int(time.time())}"
+        token = hashlib.sha256(token_data.encode()).hexdigest()
+        
+        # Return user data with token
+        user_serializer = BusinessUserSerializer(user)
+        return Response({
+            'success': True,
+            'message': 'Login successful',
+            'data': {
+                'user': user_serializer.data,
+                'token': token
+            }
+        }, status=status.HTTP_200_OK)
+        
     except Exception as e:
         return Response({
             'success': False,
