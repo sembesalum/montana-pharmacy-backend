@@ -210,6 +210,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # OTP and SMS Configuration
 ENABLE_OTP_LOGIN = os.getenv('ENABLE_OTP_LOGIN', 'True').lower() == 'true'  # Enable OTP for login by default
 OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '15'))  # OTP expires in 15 minutes
+USE_DEFAULT_OTP = os.getenv('USE_DEFAULT_OTP', 'True').lower() == 'true'  # Use default OTP (1234) for development/testing
 
 # SMS API Configuration (mShastra)
 SMS_API_URL = os.getenv('SMS_API_URL', 'https://mshastra.com/sendsms_api_json.aspx')

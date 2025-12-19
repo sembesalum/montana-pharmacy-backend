@@ -36,15 +36,16 @@ from .serializers import (
 )
 
 def generate_otp():
-    """Generate a random 4-digit OTP"""
-    # Generate random 4-digit OTP (1000-9999)
-    otp = random.randint(1000, 9999)
+    """Generate a 4-digit OTP - defaults to 1234 for development"""
+    # Check if we should use default OTP (for development/testing)
+    use_default_otp = getattr(settings, 'USE_DEFAULT_OTP', True)  # Default to True for development
     
-    # In development, allow test OTPs
-    # In production, always use random OTP
-    if settings.DEBUG:
-        # Allow '1234' as test OTP in development
-        return str(otp)
+    if use_default_otp or settings.DEBUG:
+        # Return default OTP for easy testing
+        return '1234'
+    
+    # Generate random 4-digit OTP (1000-9999) for production
+    otp = random.randint(1000, 9999)
     return str(otp)
 
 def send_otp_sms(phone_number, otp):
@@ -176,24 +177,34 @@ def login_business_user(request):
             # Check if OTP login is enabled
             enable_otp_login = getattr(settings, 'ENABLE_OTP_LOGIN', True)
             
-            # Normalize phone number - ensure it starts with + if it doesn't
-            # Try to find user with exact phone number first
+            # Normalize phone number - handle different formats
+            # Convert formats like 0616107670 to +255616107670
+            normalized_phone = phone_number
+            if normalized_phone.startswith('0'):
+                # Remove leading 0 and add +255 (Tanzania country code)
+                normalized_phone = f"+255{normalized_phone[1:]}"
+            elif normalized_phone.startswith('255'):
+                # Add + prefix if missing
+                normalized_phone = f"+{normalized_phone}"
+            elif not normalized_phone.startswith('+'):
+                # Add + prefix if missing
+                normalized_phone = f"+{normalized_phone}"
+            
+            # Try to find user with normalized phone number first
             user = None
             try:
-                user = BusinessUser.objects.get(phone_number=phone_number)
+                user = BusinessUser.objects.get(phone_number=normalized_phone)
             except BusinessUser.DoesNotExist:
-                # Try with + prefix if not present
-                if not phone_number.startswith('+'):
-                    try:
-                        user = BusinessUser.objects.get(phone_number=f"+{phone_number}")
-                    except BusinessUser.DoesNotExist:
-                        pass
-                # Try without + prefix if present
-                elif phone_number.startswith('+'):
-                    try:
-                        user = BusinessUser.objects.get(phone_number=phone_number[1:])
-                    except BusinessUser.DoesNotExist:
-                        pass
+                # Try with original phone number (in case it's already in correct format)
+                try:
+                    user = BusinessUser.objects.get(phone_number=phone_number)
+                except BusinessUser.DoesNotExist:
+                    # Try without + prefix
+                    if normalized_phone.startswith('+'):
+                        try:
+                            user = BusinessUser.objects.get(phone_number=normalized_phone[1:])
+                        except BusinessUser.DoesNotExist:
+                            pass
             
             # If user not found, return error
             if not user:
@@ -238,25 +249,28 @@ def login_business_user(request):
             # Generate OTP
             otp = generate_otp()
             
+            # Use normalized phone number for OTP
+            otp_phone = normalized_phone if user else phone_number
+            
             # Delete existing OTP for this phone number (if any)
-            HardwareOTP.objects.filter(phone_number=phone_number).delete()
+            HardwareOTP.objects.filter(phone_number=otp_phone).delete()
             
             # Create new OTP record
             HardwareOTP.objects.create(
-                phone_number=phone_number,
+                phone_number=otp_phone,
                 otp=otp,
                 is_used=False
             )
             
             # Send OTP via SMS
-            send_otp_sms(phone_number, otp)
+            send_otp_sms(otp_phone, otp)
             
             # Return response indicating OTP is required
             return Response({
                 'success': True,
                 'message': 'OTP sent to your phone number. Please verify to complete login.',
                 'needs_otp': True,
-                'phone_number': phone_number
+                'phone_number': otp_phone
             }, status=status.HTTP_200_OK)
         else:
             return Response({
@@ -373,10 +387,29 @@ def login_verify_otp(request):
                 'message': 'OTP is required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if OTP exists and is valid
+        # Normalize phone number - handle different formats
+        normalized_phone = phone_number
+        if normalized_phone.startswith('0'):
+            # Remove leading 0 and add +255 (Tanzania country code)
+            normalized_phone = f"+255{normalized_phone[1:]}"
+        elif normalized_phone.startswith('255'):
+            # Add + prefix if missing
+            normalized_phone = f"+{normalized_phone}"
+        elif not normalized_phone.startswith('+'):
+            # Add + prefix if missing
+            normalized_phone = f"+{normalized_phone}"
+        
+        # Check if OTP exists and is valid (try normalized first, then original)
+        otp_obj = None
         try:
-            otp_obj = HardwareOTP.objects.get(phone_number=phone_number)
+            otp_obj = HardwareOTP.objects.get(phone_number=normalized_phone)
         except HardwareOTP.DoesNotExist:
+            try:
+                otp_obj = HardwareOTP.objects.get(phone_number=phone_number)
+            except HardwareOTP.DoesNotExist:
+                pass
+        
+        if not otp_obj:
             return Response({
                 'success': False,
                 'message': 'No OTP found for this phone number. Please request a new one.'
@@ -407,9 +440,9 @@ def login_verify_otp(request):
         otp_obj.is_used = True
         otp_obj.save()
         
-        # Get user and generate token
+        # Get user and generate token (use normalized phone)
         try:
-            user = BusinessUser.objects.get(phone_number=phone_number)
+            user = BusinessUser.objects.get(phone_number=normalized_phone)
         except BusinessUser.DoesNotExist:
             return Response({
                 'success': False,
@@ -444,35 +477,57 @@ def login_verify_otp(request):
 def resend_otp(request):
     """Resend OTP to user"""
     try:
-        phone_number = request.data.get('phone_number')
+        phone_number = request.data.get('phone_number', '').strip()
         if not phone_number:
             return Response({
                 'success': False,
                 'message': 'Phone number is required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if user exists
+        # Normalize phone number - handle different formats
+        normalized_phone = phone_number
+        if normalized_phone.startswith('0'):
+            # Remove leading 0 and add +255 (Tanzania country code)
+            normalized_phone = f"+255{normalized_phone[1:]}"
+        elif normalized_phone.startswith('255'):
+            # Add + prefix if missing
+            normalized_phone = f"+{normalized_phone}"
+        elif not normalized_phone.startswith('+'):
+            # Add + prefix if missing
+            normalized_phone = f"+{normalized_phone}"
+        
+        # Check if user exists (try normalized first, then original)
+        user = None
         try:
-            user = BusinessUser.objects.get(phone_number=phone_number)
+            user = BusinessUser.objects.get(phone_number=normalized_phone)
         except BusinessUser.DoesNotExist:
+            try:
+                user = BusinessUser.objects.get(phone_number=phone_number)
+            except BusinessUser.DoesNotExist:
+                pass
+        
+        if not user:
             return Response({
                 'success': False,
                 'message': 'User not found'
             }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Use normalized phone for OTP
+        otp_phone = normalized_phone if user.phone_number == normalized_phone else user.phone_number
+        
         # Generate new OTP
         otp = generate_otp()
         
         # Delete existing OTP and create new one to ensure fresh timestamp
-        HardwareOTP.objects.filter(phone_number=phone_number).delete()
+        HardwareOTP.objects.filter(phone_number=otp_phone).delete()
         HardwareOTP.objects.create(
-            phone_number=phone_number,
+            phone_number=otp_phone,
             otp=otp,
             is_used=False
         )
         
         # Send OTP via SMS
-        send_otp_sms(phone_number, otp)
+        send_otp_sms(otp_phone, otp)
         
         return Response({
             'success': True,
