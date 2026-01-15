@@ -214,9 +214,9 @@ USE_DEFAULT_OTP = os.getenv('USE_DEFAULT_OTP', 'True').lower() == 'true'  # Use 
 
 # SMS API Configuration (mShastra)
 SMS_API_URL = os.getenv('SMS_API_URL', 'https://mshastra.com/sendsms_api_json.aspx')
-SMS_USERNAME = os.getenv('SMS_USERNAME', 'YOUR_SMS_USERNAME')  # Update with your SMS username
-SMS_PASSWORD = os.getenv('SMS_PASSWORD', 'YOUR_SMS_PASSWORD')  # Update with your SMS password
-SMS_SENDER = os.getenv('SMS_SENDER', 'YourApp')  # Update with your approved sender name
+SMS_USERNAME = os.getenv('SMS_USERNAME', 'Montana Pharmacy')  # Update with your SMS username
+SMS_PASSWORD = os.getenv('SMS_PASSWORD', 'mpubmmjh')  # Update with your SMS password
+SMS_SENDER = os.getenv('SMS_SENDER', 'MONTANA')  # Update with your approved sender name
 
 # Security settings for production
 if not DEBUG:
