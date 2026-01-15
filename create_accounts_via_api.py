@@ -2,6 +2,7 @@
 """
 Script to create test accounts using the backend API endpoints.
 This script makes HTTP requests to the production API to create test accounts.
+Supports both creating new accounts and updating existing ones.
 """
 
 import requests
@@ -10,6 +11,100 @@ import time
 
 # Production API configuration
 API_BASE_URL = "https://geoclimatz.pythonanywhere.com/v1/hardware"
+
+# Mapping of old phone numbers to new phone numbers for updates
+# Format: {'role': {'old_phone': 'new_phone'}}
+# IMPORTANT: The old phone number must match exactly as stored in database
+# The password in account_data will be used as current_password for the update
+PHONE_UPDATE_MAP = {
+    'MANAGER': {
+        # 'old_phone': 'new_phone'
+        # Example: '+255616107670': '+255616107671'
+        # Add your mapping here, e.g.:
+        # '+255616107670': '+255616107671'  # Old phone → New phone
+    }
+}
+
+def get_user_id_by_phone(phone_number, password):
+    """
+    Attempt to get user_id by trying to login.
+    Note: This will trigger OTP, but we can extract user info from error responses if needed.
+    For now, we'll use a different approach - try to get user data endpoint if available.
+    """
+    # Try login to see if user exists (will return needs_otp but user exists)
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/login/",
+            json={
+                'phone_number': phone_number,
+                'password': password
+            },
+            headers={
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout=30
+        )
+        
+        # Even if OTP is needed, user exists - but we can't get user_id this way easily
+        # We'll need to use admin endpoint or another method
+        return None
+    except:
+        return None
+
+def update_user_profile(user_id, account_data, current_password):
+    """Update an existing user's profile"""
+    try:
+        update_data = {
+            'current_password': current_password,
+            'phone_number': account_data['phone_number'],
+            'business_name': account_data['business_name'],
+            'business_location': account_data['business_location'],
+            'business_type': account_data['business_type'],
+            'tin_number': account_data['tin_number']
+        }
+        
+        response = requests.put(
+            f"{API_BASE_URL}/users/{user_id}/update-profile/",
+            json=update_data,
+            headers={
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout=30
+        )
+        
+        return response
+    except Exception as e:
+        return None
+
+def get_all_users():
+    """Get all users from admin endpoint"""
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/admin/users/",
+            headers={
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success') and result.get('data'):
+                return result['data']
+        return []
+    except:
+        return []
+
+def find_user_id_by_phone(phone_number):
+    """Find user_id by phone number using admin endpoint"""
+    users = get_all_users()
+    for user in users:
+        if user.get('phone_number') == phone_number:
+            return user.get('user_id')
+    return None
 
 def create_test_accounts_via_api():
     """Create test accounts using API endpoints"""
@@ -49,7 +144,7 @@ def create_test_accounts_via_api():
             'role': 'RECEIVER'
         },
         {
-            'phone_number': '+255444987654',
+            'phone_number': '+255616107670',
             'password': 'manager@123',
             'business_name': 'Demo Manager Pharmacy',
             'business_location': 'Dodoma, Tanzania',
@@ -121,8 +216,57 @@ def create_test_accounts_via_api():
             elif response.status_code == 400:
                 result = response.json()
                 if 'already exists' in result.get('message', '').lower():
-                    print(f"⚠️  Account already exists, skipping...")
-                    created_accounts.append(account_data)
+                    # Check if we need to update this account
+                    role = account_data.get('role')
+                    update_map = PHONE_UPDATE_MAP.get(role, {})
+                    
+                    # Check if this phone number is in the update map (meaning it's a new phone)
+                    needs_update = False
+                    old_phone = None
+                    
+                    for old_ph, new_ph in update_map.items():
+                        if account_data['phone_number'] == new_ph:
+                            needs_update = True
+                            old_phone = old_ph
+                            break
+                    
+                    if needs_update and old_phone:
+                        print(f"🔄 Account exists, attempting to update phone number...")
+                        print(f"   Old phone: {old_phone} → New phone: {account_data['phone_number']}")
+                        
+                        # Find user_id by old phone number
+                        user_id = find_user_id_by_phone(old_phone)
+                        
+                        if user_id:
+                            print(f"   Found user_id: {user_id}")
+                            # Attempt to update using current password
+                            update_response = update_user_profile(
+                                user_id, 
+                                account_data, 
+                                account_data['password']  # Using same password as current
+                            )
+                            
+                            if update_response and update_response.status_code == 200:
+                                result = update_response.json()
+                                if result.get('success'):
+                                    print(f"✅ Successfully updated {account_data['role']} account phone number")
+                                    created_accounts.append(account_data)
+                                else:
+                                    error_msg = f"❌ Update failed: {result.get('message', 'Unknown error')}"
+                                    print(error_msg)
+                                    errors.append(f"{account_data['role']}: {error_msg}")
+                            else:
+                                error_msg = f"❌ Update failed: {update_response.text if update_response else 'No response'}"
+                                print(error_msg)
+                                print(f"   Note: Update requires correct current_password")
+                                errors.append(f"{account_data['role']}: Update failed - check password")
+                        else:
+                            print(f"⚠️  Could not find user with old phone number: {old_phone}")
+                            print(f"   Skipping update - user may not exist or phone number format differs")
+                            errors.append(f"{account_data['role']}: User not found with old phone {old_phone}")
+                    else:
+                        print(f"⚠️  Account already exists, skipping...")
+                        created_accounts.append(account_data)
                 else:
                     error_msg = f"❌ Validation Error: {result.get('message', 'Unknown error')}"
                     print(error_msg)
@@ -172,6 +316,11 @@ def create_test_accounts_via_api():
     print(f"🌐 Frontend: Your deployed Vercel app")
     print(f"🌐 Backend: {API_BASE_URL}")
     print(f"💡 Note: Some accounts may need OTP verification on first login")
+    print(f"\n📝 IMPORTANT: To update existing accounts:")
+    print(f"   1. Find the user_id from the database or admin panel")
+    print(f"   2. Use PUT /users/<user_id>/update-profile/ endpoint")
+    print(f"   3. Include current_password and new phone_number in the request")
+    print(f"   4. Or modify PHONE_UPDATE_MAP in this script with old→new phone mapping")
     
     return len(created_accounts), len(errors)
 
