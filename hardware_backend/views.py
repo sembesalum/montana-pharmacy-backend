@@ -279,13 +279,9 @@ def login_business_user(request):
                     'message': 'Invalid phone number or password'
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Check if user is verified (for registration verification)
-            if not user.is_verified:
-                return Response({
-                    'success': False,
-                    'message': 'Please verify your phone number first',
-                    'needs_verification': True
-                }, status=status.HTTP_401_UNAUTHORIZED)
+            # Note: We allow login even if user is not verified
+            # They will need to verify via OTP during login process
+            # If user is not verified, they should complete OTP verification
             
             # If OTP login is disabled, return token directly (backward compatibility)
             if not enable_otp_login:
@@ -308,8 +304,8 @@ def login_business_user(request):
             # Generate OTP
             otp = generate_otp()
             
-            # Use normalized phone number for OTP
-            otp_phone = normalized_phone if user else phone_number
+            # Use the user's actual phone number from database (to ensure consistency)
+            otp_phone = user.phone_number
             
             # Delete existing OTP for this phone number (if any)
             HardwareOTP.objects.filter(phone_number=otp_phone).delete()
@@ -325,12 +321,19 @@ def login_business_user(request):
             send_otp_sms(otp_phone, otp)
             
             # Return response indicating OTP is required
-            return Response({
+            response_data = {
                 'success': True,
                 'message': 'OTP sent to your phone number. Please verify to complete login.',
                 'needs_otp': True,
                 'phone_number': otp_phone
-            }, status=status.HTTP_200_OK)
+            }
+            
+            # If user is not verified, include that info
+            if not user.is_verified:
+                response_data['message'] = 'OTP sent to your phone number. Please verify to complete login and activate your account.'
+                response_data['needs_verification'] = True
+            
+            return Response(response_data, status=status.HTTP_200_OK)
         else:
             return Response({
                 'success': False,
@@ -447,26 +450,25 @@ def login_verify_otp(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Normalize phone number - handle different formats
-        normalized_phone = phone_number
-        if normalized_phone.startswith('0'):
-            # Remove leading 0 and add +255 (Tanzania country code)
-            normalized_phone = f"+255{normalized_phone[1:]}"
-        elif normalized_phone.startswith('255'):
-            # Add + prefix if missing
-            normalized_phone = f"+{normalized_phone}"
-        elif not normalized_phone.startswith('+'):
-            # Add + prefix if missing
-            normalized_phone = f"+{normalized_phone}"
+        normalized_phone = normalize_phone_number(phone_number)
         
-        # Check if OTP exists and is valid (try normalized first, then original)
+        # Check if OTP exists - try multiple phone formats
         otp_obj = None
-        try:
-            otp_obj = HardwareOTP.objects.get(phone_number=normalized_phone)
-        except HardwareOTP.DoesNotExist:
+        phone_variants = [
+            normalized_phone,
+            phone_number,
+            normalized_phone[1:] if normalized_phone.startswith('+') else f"+{normalized_phone}",
+        ]
+        
+        # Remove duplicates
+        phone_variants = list(dict.fromkeys(phone_variants))
+        
+        for phone_variant in phone_variants:
             try:
-                otp_obj = HardwareOTP.objects.get(phone_number=phone_number)
+                otp_obj = HardwareOTP.objects.get(phone_number=phone_variant)
+                break
             except HardwareOTP.DoesNotExist:
-                pass
+                continue
         
         if not otp_obj:
             return Response({
@@ -499,14 +501,48 @@ def login_verify_otp(request):
         otp_obj.is_used = True
         otp_obj.save()
         
-        # Get user and generate token (use normalized phone)
-        try:
-            user = BusinessUser.objects.get(phone_number=normalized_phone)
-        except BusinessUser.DoesNotExist:
+        # Get user - try multiple phone formats (use the phone from OTP record)
+        otp_phone = otp_obj.phone_number
+        user = None
+        
+        phone_variants = [
+            otp_phone,  # Phone stored in OTP record
+            normalized_phone,
+            phone_number,
+            normalized_phone[1:] if normalized_phone.startswith('+') else f"+{normalized_phone}",
+        ]
+        
+        # Remove duplicates
+        phone_variants = list(dict.fromkeys(phone_variants))
+        
+        for phone_variant in phone_variants:
+            try:
+                user = BusinessUser.objects.get(phone_number=phone_variant)
+                break
+            except BusinessUser.DoesNotExist:
+                continue
+        
+        # If still not found, try case-insensitive search
+        if not user:
+            from django.db.models import Q
+            users = BusinessUser.objects.filter(
+                Q(phone_number__iexact=otp_phone) |
+                Q(phone_number__iexact=normalized_phone) |
+                Q(phone_number__iexact=phone_number)
+            )
+            if users.exists():
+                user = users.first()
+        
+        if not user:
             return Response({
                 'success': False,
                 'message': 'User not found'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark user as verified if they weren't before (first time login/verification)
+        if not user.is_verified:
+            user.is_verified = True
+            user.save()
         
         # Generate authentication token
         import hashlib
