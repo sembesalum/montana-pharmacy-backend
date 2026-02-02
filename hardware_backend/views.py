@@ -110,6 +110,29 @@ def send_otp_sms(phone_number, otp):
             return True
         return False
 
+def normalize_phone_number(phone_number):
+    """Normalize phone number to consistent format (+255XXXXXXXXX)"""
+    if not phone_number:
+        return phone_number
+    
+    phone = phone_number.strip()
+    
+    # Remove any spaces, dashes, or other characters
+    phone = phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    
+    # Normalize to +255 format
+    if phone.startswith('0'):
+        # Remove leading 0 and add +255 (Tanzania country code)
+        phone = f"+255{phone[1:]}"
+    elif phone.startswith('255'):
+        # Add + prefix if missing
+        phone = f"+{phone}"
+    elif not phone.startswith('+'):
+        # Add + prefix if missing
+        phone = f"+{phone}"
+    
+    return phone
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_business_user(request):
@@ -117,11 +140,20 @@ def register_business_user(request):
     try:
         serializer = BusinessUserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
-            # Check if user already exists
+            # Normalize phone number to ensure consistency
             phone_number = serializer.validated_data['phone_number']
+            normalized_phone = normalize_phone_number(phone_number)
             tin_number = serializer.validated_data['tin_number']
             
-            if BusinessUser.objects.filter(phone_number=phone_number).exists():
+            # Check if user already exists with normalized phone
+            if BusinessUser.objects.filter(phone_number=normalized_phone).exists():
+                return Response({
+                    'success': False,
+                    'message': 'User with this phone number already exists'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Also check with original phone number format (in case normalization differs)
+            if normalized_phone != phone_number and BusinessUser.objects.filter(phone_number=phone_number).exists():
                 return Response({
                     'success': False,
                     'message': 'User with this phone number already exists'
@@ -133,24 +165,27 @@ def register_business_user(request):
                     'message': 'User with this TIN number already exists'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            # Update serializer data with normalized phone
+            serializer.validated_data['phone_number'] = normalized_phone
+            
             # Create user
             user = serializer.save()
             
-            # Generate and send OTP
+            # Generate and send OTP (use normalized phone)
             otp = generate_otp()
             HardwareOTP.objects.update_or_create(
-                phone_number=phone_number,
+                phone_number=normalized_phone,
                 defaults={'otp': otp, 'is_used': False}
             )
             
             # Send OTP via SMS
-            send_otp_sms(phone_number, otp)
+            send_otp_sms(normalized_phone, otp)
             
             return Response({
                 'success': True,
                 'message': 'Registration successful. Please verify your phone number with the OTP sent.',
                 'user_id': user.user_id,
-                'phone_number': phone_number
+                'phone_number': normalized_phone
             }, status=status.HTTP_201_CREATED)
         else:
             return Response({
@@ -178,43 +213,67 @@ def login_business_user(request):
             enable_otp_login = getattr(settings, 'ENABLE_OTP_LOGIN', True)
             
             # Normalize phone number - handle different formats
-            # Convert formats like 0616107670 to +255616107670
-            normalized_phone = phone_number
-            if normalized_phone.startswith('0'):
-                # Remove leading 0 and add +255 (Tanzania country code)
-                normalized_phone = f"+255{normalized_phone[1:]}"
-            elif normalized_phone.startswith('255'):
-                # Add + prefix if missing
-                normalized_phone = f"+{normalized_phone}"
-            elif not normalized_phone.startswith('+'):
-                # Add + prefix if missing
-                normalized_phone = f"+{normalized_phone}"
+            normalized_phone = normalize_phone_number(phone_number)
             
-            # Try to find user with normalized phone number first
+            # Try to find user with multiple phone number formats
             user = None
-            try:
-                user = BusinessUser.objects.get(phone_number=normalized_phone)
-            except BusinessUser.DoesNotExist:
-                # Try with original phone number (in case it's already in correct format)
-                try:
-                    user = BusinessUser.objects.get(phone_number=phone_number)
-                except BusinessUser.DoesNotExist:
-                    # Try without + prefix
-                    if normalized_phone.startswith('+'):
-                        try:
-                            user = BusinessUser.objects.get(phone_number=normalized_phone[1:])
-                        except BusinessUser.DoesNotExist:
-                            pass
+            phone_variants = [
+                normalized_phone,  # +255616107670
+                phone_number,     # Original format
+                normalized_phone[1:] if normalized_phone.startswith('+') else f"+{normalized_phone}",  # Without + or with +
+            ]
             
-            # If user not found, return error
+            # Remove duplicates
+            phone_variants = list(dict.fromkeys(phone_variants))
+            
+            for phone_variant in phone_variants:
+                try:
+                    user = BusinessUser.objects.get(phone_number=phone_variant)
+                    break  # Found user, exit loop
+                except BusinessUser.DoesNotExist:
+                    continue
+            
+            # If still not found, try case-insensitive search (in case of any whitespace issues)
             if not user:
+                # Try with Q object for case-insensitive search
+                from django.db.models import Q
+                users = BusinessUser.objects.filter(
+                    Q(phone_number__iexact=normalized_phone) |
+                    Q(phone_number__iexact=phone_number) |
+                    Q(phone_number__iexact=normalized_phone.replace('+', ''))
+                )
+                if users.exists():
+                    user = users.first()
+            
+            # If user not found, return error with helpful debug info (only in development)
+            if not user:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"User not found. Input: {phone_number}, Normalized: {normalized_phone}, Tried: {phone_variants}")
+                
+                # In production, don't expose debug info
+                debug_info = {}
+                if settings.DEBUG:
+                    debug_info = {
+                        'input_phone': phone_number,
+                        'normalized_phone': normalized_phone,
+                        'tried_variants': phone_variants[:5]
+                    }
+                
                 return Response({
                     'success': False,
-                    'message': 'Invalid phone number or password'
+                    'message': 'Invalid phone number or password',
+                    **debug_info
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
             # Check password
-            if not user.check_password(password):
+            password_valid = user.check_password(password)
+            if not password_valid:
+                # Log for debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Password check failed for user {user.phone_number} (user_id: {user.user_id})")
+                
                 return Response({
                     'success': False,
                     'message': 'Invalid phone number or password'
