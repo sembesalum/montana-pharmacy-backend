@@ -3086,10 +3086,9 @@ def get_expiring_products(request):
 # Product Batch Management APIs
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def create_product_batch(request):
+def create_product_batch(request, product_id):
     """Create a new product batch"""
     try:
-        product_id = request.data.get('product_id')
         if not product_id:
             return Response({
                 'success': False,

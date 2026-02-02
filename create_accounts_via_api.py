@@ -328,23 +328,84 @@ def test_api_connection():
     """Test if the API is accessible"""
     try:
         print("🔍 Testing API connection...")
-        response = requests.get(f"{API_BASE_URL}/", timeout=10)
+        # Test with a valid endpoint that exists (home endpoint)
+        response = requests.get(f"{API_BASE_URL}/home/", timeout=10)
         if response.status_code == 200:
             print("✅ API is accessible")
             return True
+        elif response.status_code == 404:
+            # Try alternative endpoint
+            print("⚠️  Home endpoint not found, trying register endpoint...")
+            response = requests.post(
+                f"{API_BASE_URL}/register/",
+                json={'test': 'connection'},
+                timeout=10
+            )
+            # Even if it returns 400 (validation error), API is accessible
+            if response.status_code in [400, 201]:
+                print("✅ API is accessible (endpoint responded)")
+                return True
+            else:
+                print(f"⚠️  API returned status {response.status_code}")
+                print(f"   Response: {response.text[:200]}")
+                return False
         else:
             print(f"⚠️  API returned status {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
             return False
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Connection failed: Cannot reach {API_BASE_URL}")
+        print(f"   Error: {str(e)}")
+        return False
+    except requests.exceptions.Timeout as e:
+        print(f"❌ Connection timeout: Server took too long to respond")
+        print(f"   Error: {str(e)}")
+        return False
     except Exception as e:
         print(f"❌ API connection failed: {str(e)}")
         return False
 
 if __name__ == '__main__':
+    import sys
+    
     print("🚀 Production Test Accounts Creator (API Method)")
     print("=" * 60)
+    print(f"🌐 API URL: {API_BASE_URL}")
+    print("=" * 60)
     
-    # Test API connection first
-    if test_api_connection():
+    # Check if --skip-test flag is provided
+    skip_test = '--skip-test' in sys.argv or '--skip-connection-test' in sys.argv
+    
+    # Test API connection first (unless skipped)
+    if not skip_test:
+        if test_api_connection():
+            print("\n" + "=" * 60)
+            created, errors = create_test_accounts_via_api()
+            
+            if created > 0:
+                print(f"\n🎉 Success! {created} accounts are ready for testing!")
+            else:
+                print(f"\n⚠️  No accounts were created. Check the errors above.")
+        else:
+            print("\n⚠️  Connection test failed, but continuing anyway...")
+            print("   (Use --skip-test flag to skip connection test)")
+            print("\n" + "=" * 60)
+            
+            # Ask user if they want to continue
+            try:
+                response = input("Continue anyway? (y/n): ").strip().lower()
+                if response == 'y' or response == 'yes':
+                    created, errors = create_test_accounts_via_api()
+                    if created > 0:
+                        print(f"\n🎉 Success! {created} accounts are ready for testing!")
+                    else:
+                        print(f"\n⚠️  No accounts were created. Check the errors above.")
+                else:
+                    print("❌ Aborted by user.")
+            except KeyboardInterrupt:
+                print("\n❌ Aborted by user.")
+    else:
+        print("⏭️  Skipping connection test (--skip-test flag provided)")
         print("\n" + "=" * 60)
         created, errors = create_test_accounts_via_api()
         
@@ -352,9 +413,4 @@ if __name__ == '__main__':
             print(f"\n🎉 Success! {created} accounts are ready for testing!")
         else:
             print(f"\n⚠️  No accounts were created. Check the errors above.")
-    else:
-        print("\n❌ Cannot connect to the API. Please check:")
-        print("   - API URL is correct")
-        print("   - Server is running")
-        print("   - Network connection is working")
 
