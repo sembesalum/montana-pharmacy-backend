@@ -2033,6 +2033,64 @@ def admin_delete_user(request, user_id):
             'message': f'Failed to delete user: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([AllowAny])
+def admin_update_user(request, user_id):
+    """Admin: Update a business user's basic details (name, phone, role, status)"""
+    try:
+        try:
+            user = BusinessUser.objects.get(user_id=user_id)
+        except BusinessUser.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'User not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data
+
+        # Update business name
+        name = data.get('name')
+        if name is not None:
+            user.business_name = name
+
+        # Update phone number with normalization and uniqueness check
+        phone = data.get('phone') or data.get('phone_number')
+        if phone is not None:
+            normalized_phone = normalize_phone_number(phone)
+            if BusinessUser.objects.exclude(user_id=user_id).filter(phone_number=normalized_phone).exists():
+                return Response({
+                    'success': False,
+                    'message': 'Phone number already exists for another user'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            user.phone_number = normalized_phone
+
+        # Update role (business_type) from frontend role value
+        role = data.get('role') or data.get('business_type')
+        if role is not None:
+            # Store as lowercased business type for consistency
+            user.business_type = str(role).lower()
+
+        # Update status -> map to is_verified
+        status_value = data.get('status')
+        if status_value is not None:
+            # Treat "active" as verified, others as not verified
+            user.is_verified = (str(status_value).lower() == 'active')
+
+        user.save()
+
+        return Response({
+            'success': True,
+            'message': 'User updated successfully',
+            'data': BusinessUserSerializer(user).data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to update user: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 # User Profile Management Views
 @api_view(['PUT'])
 @permission_classes([AllowAny])

@@ -77,6 +77,7 @@ urlpatterns = [
     path('admin/users/', views.admin_get_all_users, name='admin_get_all_users'),
     path('admin/users/<str:user_id>/toggle-verification/', views.admin_toggle_user_verification, name='admin_toggle_user_verification'),
     path('admin/users/<str:user_id>/delete/', views.admin_delete_user, name='admin_delete_user'),
+    path('admin/users/<str:user_id>/update/', views.admin_update_user, name='admin_update_user'),
     
     # Order Management APIs
     path('orders/', views.create_order, name='create_order'),
