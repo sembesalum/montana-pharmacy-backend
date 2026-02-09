@@ -131,7 +131,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'brand', 'brand_name',
             'product_type', 'product_type_name', 'subtype', 'size',
             'color', 'material', 'weight', 'dimensions', 'is_active',
-            'is_featured', 'stock_quantity', 'minimum_stock', 'batches', 'created_at'
+            'is_featured', 'stock_quantity', 'minimum_stock', 'expiry_date', 'batches', 'created_at'
         ]
         read_only_fields = ['product_id', 'created_at']
 

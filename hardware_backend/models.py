@@ -91,7 +91,7 @@ class Product(models.Model):
     """Product model with all required fields"""
     product_id = models.CharField(max_length=50, primary_key=True, default=generate_uuid)
     name = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(blank=True, null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     image = models.CharField(max_length=500, blank=True, null=True)
     

@@ -1040,6 +1040,23 @@ def admin_create_product(request):
                     'message': f'Product type "{data["product_type"]}" not found'
                 }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Extract shelf_id for product location (required)
+        shelf_id = data.pop('shelf_id', None) or data.pop('shelf', None)
+        if not shelf_id:
+            return Response({
+                'success': False,
+                'message': 'Shelf location is required. Please select a shelf where the product will be located.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate shelf exists
+        try:
+            shelf = Shelf.objects.get(shelf_id=shelf_id)
+        except Shelf.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': f'Shelf with ID "{shelf_id}" not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         print(f"🔍 DEBUG: Final data before serializer: {data}")
         print(f"🔍 DEBUG: Data types: {[(k, type(v).__name__) for k, v in data.items()]}")
         
@@ -1047,6 +1064,23 @@ def admin_create_product(request):
         if serializer.is_valid():
             product = serializer.save()
             print(f"🔍 DEBUG: Product created successfully: {product.product_id}")
+            
+            # Create product location on the specified shelf
+            try:
+                # Get quantity from stock_quantity or use 0
+                quantity = int(data.get('stock_quantity', 0)) if data.get('stock_quantity') else 0
+                
+                ProductLocation.objects.create(
+                    product=product,
+                    shelf=shelf,
+                    quantity=quantity
+                )
+                print(f"🔍 DEBUG: Product location created: {product.name} on {shelf.name}")
+            except Exception as loc_error:
+                print(f"⚠️ WARNING: Failed to create product location: {str(loc_error)}")
+                # Don't fail the product creation if location creation fails
+                # The location can be added later
+            
             return Response({
                 'success': True,
                 'message': 'Product created successfully',
