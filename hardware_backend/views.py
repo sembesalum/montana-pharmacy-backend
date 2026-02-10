@@ -2334,19 +2334,20 @@ def get_order_details_new_format(request, order_id):
 def get_user_orders(request, user_id):
     """Get all orders for a specific user"""
     try:
-        # Get user
+        # Get user; if not found, return empty list instead of 404
         try:
             user = BusinessUser.objects.get(user_id=user_id)
         except BusinessUser.DoesNotExist:
             return Response({
-                'success': False,
-                'message': 'User not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
+                'success': True,
+                'message': 'No orders found for this user',
+                'data': []
+            }, status=status.HTTP_200_OK)
+
         # Get user's orders
         orders = Order.objects.filter(user=user).prefetch_related('order_items__product')
         orders_serializer = OrderSerializer(orders, many=True)
-        
+
         return Response({
             'success': True,
             'data': orders_serializer.data

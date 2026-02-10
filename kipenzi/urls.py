@@ -45,4 +45,6 @@ urlpatterns = [
 
     # Hardware Backend APIs
     path('v1/hardware/', include('hardware_backend.urls')),
+    # Backwards-compatible hardware API prefix (for clients calling /hardware/...)
+    path('hardware/', include('hardware_backend.urls')),
 ]
