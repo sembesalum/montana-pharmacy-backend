@@ -268,15 +268,15 @@ class Order(models.Model):
         subtotal = sum(item.total_price for item in self.order_items.all())
         self.subtotal = subtotal
         
-        # Calculate tax (assuming 18% VAT)
-        self.tax_amount = subtotal * Decimal('0.18')
-        
+        # Medicine products: no tax
+        self.tax_amount = Decimal('0.00')
+
         # Calculate shipping (free for orders over 100,000, otherwise 5,000)
         if subtotal >= Decimal('100000.00'):
             self.shipping_amount = Decimal('0.00')
         else:
             self.shipping_amount = Decimal('5000.00')
-        
+
         self.total_amount = self.subtotal + self.tax_amount + self.shipping_amount
         self.save()
 
@@ -528,9 +528,9 @@ class Invoice(models.Model):
         subtotal = sum(item.total_price for item in self.invoice_items.all())
         self.subtotal = subtotal
         
-        # Calculate tax (assuming 18% VAT)
-        self.tax_amount = (subtotal - self.discount_amount) * Decimal('0.18')
-        
+        # Medicine products: no tax
+        self.tax_amount = Decimal('0.00')
+
         # Total amount
         self.total_amount = self.subtotal - self.discount_amount + self.tax_amount + self.shipping_amount
         self.save()
