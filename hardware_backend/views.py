@@ -279,9 +279,12 @@ def login_business_user(request):
                     'message': 'Invalid phone number or password'
                 }, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Note: We allow login even if user is not verified
-            # They will need to verify via OTP during login process
-            # If user is not verified, they should complete OTP verification
+            # Require admin approval before login (mobile app users)
+            if not user.is_verified:
+                return Response({
+                    'success': False,
+                    'message': 'Please Wait for the approval before Login'
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # If OTP login is disabled, return token directly (backward compatibility)
             if not enable_otp_login:
@@ -320,20 +323,13 @@ def login_business_user(request):
             # Send OTP via SMS
             send_otp_sms(otp_phone, otp)
             
-            # Return response indicating OTP is required
-            response_data = {
+            # Return response indicating OTP is required (user is already approved at this point)
+            return Response({
                 'success': True,
                 'message': 'OTP sent to your phone number. Please verify to complete login.',
                 'needs_otp': True,
                 'phone_number': otp_phone
-            }
-            
-            # If user is not verified, include that info
-            if not user.is_verified:
-                response_data['message'] = 'OTP sent to your phone number. Please verify to complete login and activate your account.'
-                response_data['needs_verification'] = True
-            
-            return Response(response_data, status=status.HTTP_200_OK)
+            }, status=status.HTTP_200_OK)
         else:
             return Response({
                 'success': False,
@@ -539,10 +535,12 @@ def login_verify_otp(request):
                 'message': 'User not found'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Mark user as verified if they weren't before (first time login/verification)
+        # Require admin approval before login (do not auto-verify; only dashboard can approve)
         if not user.is_verified:
-            user.is_verified = True
-            user.save()
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
         
         # Generate authentication token
         import hashlib
