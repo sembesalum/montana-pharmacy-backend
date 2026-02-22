@@ -451,7 +451,7 @@ class CreateSaleSerializer(serializers.Serializer):
         min_length=1
     )
     payment_method = serializers.ChoiceField(choices=Sale.PAYMENT_METHOD_CHOICES, default='CASH')
-    payment_status = serializers.ChoiceField(choices=Sale.PAYMENT_STATUS_CHOICES, default='PAID')
+    payment_status = serializers.ChoiceField(choices=Sale.PAYMENT_STATUS_CHOICES, default='UNPAID')
     discount = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
     salesperson_name = serializers.CharField(required=False, allow_blank=True)
     salesperson = serializers.CharField(required=False, allow_blank=True)  # User ID
@@ -502,7 +502,7 @@ class CreateSaleSerializer(serializers.Serializer):
             customer_name=validated_data.get('customer_name', '') or '',
             customer_phone=validated_data.get('customer_phone', '') or '',
             payment_method=validated_data.get('payment_method', 'CASH'),
-            payment_status=validated_data.get('payment_status', 'PAID'),
+            payment_status=validated_data.get('payment_status', 'UNPAID'),
             discount=Decimal(str(validated_data.get('discount', 0))),
             salesperson=salesperson,
             salesperson_name=salesperson_name,
