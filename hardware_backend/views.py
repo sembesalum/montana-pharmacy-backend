@@ -694,18 +694,17 @@ def home_page_with_user(request):
             'banners': banners_serializer.data
         }
         
-        # If user_id is provided, add personalized content
+        # If user_id is provided, add personalized content (only for approved users)
         if user_id:
             try:
                 user = BusinessUser.objects.get(user_id=user_id)
+                if not user.is_verified:
+                    return Response({
+                        'success': False,
+                        'message': 'Please Wait for the approval before Login'
+                    }, status=status.HTTP_403_FORBIDDEN)
                 user_serializer = BusinessUserSerializer(user)
-                
-                # Add user data to response
                 response_data['user'] = user_serializer.data
-                
-                # You can add personalized content here based on user preferences
-                # For example: favorite categories, recent purchases, etc.
-                
             except BusinessUser.DoesNotExist:
                 # User not found, but still return basic home page data
                 pass
@@ -782,18 +781,17 @@ def products_page_with_user(request):
             'product_types': product_types_data
         }
         
-        # If user_id is provided, add user context
+        # If user_id is provided, add user context (only for approved users)
         if user_id:
             try:
                 user = BusinessUser.objects.get(user_id=user_id)
+                if not user.is_verified:
+                    return Response({
+                        'success': False,
+                        'message': 'Please Wait for the approval before Login'
+                    }, status=status.HTTP_403_FORBIDDEN)
                 user_serializer = BusinessUserSerializer(user)
-                
-                # Add user data to response
                 response_data['user'] = user_serializer.data
-                
-                # You can add personalized product recommendations here
-                # For example: recently viewed products, favorites, etc.
-                
             except BusinessUser.DoesNotExist:
                 # User not found, but still return products data
                 pass
@@ -940,6 +938,11 @@ def get_business_user_data(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         user = BusinessUser.objects.get(user_id=user_id)
+        if not user.is_verified:
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
         serializer = BusinessUserSerializer(user)
         return Response({
             'success': True,
@@ -2103,6 +2106,11 @@ def update_user_profile(request, user_id):
                 'success': False,
                 'message': 'User not found'
             }, status=status.HTTP_404_NOT_FOUND)
+        if not user.is_verified:
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
         
         # Get current password for verification
         current_password = request.data.get('current_password')
@@ -2177,6 +2185,11 @@ def update_user_password(request, user_id):
                 'success': False,
                 'message': 'User not found'
             }, status=status.HTTP_404_NOT_FOUND)
+        if not user.is_verified:
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
         
         # Get password data
         current_password = request.data.get('current_password')
@@ -2265,6 +2278,11 @@ def create_order(request):
                 'success': False,
                 'message': 'User not found'
             }, status=status.HTTP_404_NOT_FOUND)
+        if not user.is_verified:
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
         
         # Create a mock request context for the serializer
         mock_request = type('MockRequest', (), {'user': user})()
@@ -2341,6 +2359,11 @@ def get_user_orders(request, user_id):
                 'message': 'No orders found for this user',
                 'data': []
             }, status=status.HTTP_200_OK)
+        if not user.is_verified:
+            return Response({
+                'success': False,
+                'message': 'Please Wait for the approval before Login'
+            }, status=status.HTTP_403_FORBIDDEN)
 
         # Get user's orders
         orders = Order.objects.filter(user=user).prefetch_related('order_items__product')
