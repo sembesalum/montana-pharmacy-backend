@@ -270,14 +270,9 @@ class Order(models.Model):
         subtotal = sum(item.total_price for item in self.order_items.all())
         self.subtotal = subtotal
         
-        # Medicine products: no tax
+        # Medicine products: no tax and no shipping fee (shipping temporarily disabled)
         self.tax_amount = Decimal('0.00')
-
-        # Calculate shipping (free for orders over 100,000, otherwise 5,000)
-        if subtotal >= Decimal('100000.00'):
-            self.shipping_amount = Decimal('0.00')
-        else:
-            self.shipping_amount = Decimal('5000.00')
+        self.shipping_amount = Decimal('0.00')
 
         self.total_amount = self.subtotal + self.tax_amount + self.shipping_amount
         self.save()
