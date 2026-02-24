@@ -993,23 +993,28 @@ def admin_create_product(request):
             for key, value in request.POST.items():
                 data[key] = value
         
-        # Handle image upload if provided
-        image_file = request.FILES.get('image')
-        
-        # Remove image field from data if no file is uploaded
-        if 'image' in data and not image_file:
+        # Handle image upload(s): single 'image' or up to 3 'image_0', 'image_1', 'image_2'
+        image_urls = []
+        for key in ['image', 'image_0', 'image_1', 'image_2']:
+            f = request.FILES.get(key)
+            if f:
+                url = handle_image_upload(f, 'products')
+                if url:
+                    image_urls.append(url)
+                else:
+                    return Response({
+                        'success': False,
+                        'message': f'Failed to upload image ({key})'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        image_urls = image_urls[:3]
+        if image_urls:
+            data['images'] = image_urls
+            data['image'] = image_urls[0]
+        if 'image' in data and isinstance(data.get('image'), str) and not request.FILES.get('image'):
+            pass
+        elif 'image' in data and not request.FILES.get('image') and not image_urls:
             del data['image']
-        
-        if image_file:
-            image_url = handle_image_upload(image_file, 'products')
-            if image_url:
-                data['image'] = image_url
-            else:
-                return Response({
-                    'success': False,
-                    'message': 'Failed to upload image'
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Convert names to IDs for foreign key fields
         if 'category' in data and data['category']:
             try:
@@ -1113,24 +1118,38 @@ def admin_update_product(request, product_id):
                 'message': 'Product not found'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # Handle image upload if provided
-        image_file = request.FILES.get('image')
         data = request.data.copy()
-        
-        # Remove image field from data if no file is uploaded
-        if 'image' in data and not image_file:
+        current_images = list(product.images) if product.images else ([product.image] if product.image else [])
+        if isinstance(data.get('images'), str):
+            try:
+                import json
+                current_images = json.loads(data['images'])
+            except Exception:
+                pass
+        elif isinstance(data.get('images'), list):
+            current_images = list(data['images'])[:3]
+        # Build final list: slot i = new file upload at image_i, else keep current_images[i]
+        final_images = []
+        for i in range(3):
+            f = request.FILES.get(f'image_{i}')
+            if f:
+                url = handle_image_upload(f, 'products')
+                if url:
+                    final_images.append(url)
+            elif i < len(current_images) and current_images[i]:
+                final_images.append(current_images[i])
+        if request.FILES.get('image'):
+            url = handle_image_upload(request.FILES['image'], 'products', product.image)
+            if url:
+                if final_images:
+                    final_images[0] = url
+                else:
+                    final_images = [url]
+        data['images'] = final_images
+        data['image'] = final_images[0] if final_images else None
+        if 'image' in data and data['image'] is None:
             del data['image']
-        
-        if image_file:
-            image_url = handle_image_upload(image_file, 'products', product.image)
-            if image_url:
-                data['image'] = image_url
-            else:
-                return Response({
-                    'success': False,
-                    'message': 'Failed to upload image'
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         serializer = ProductSerializer(product, data=data, partial=True)
         if serializer.is_valid():
             updated_product = serializer.save()

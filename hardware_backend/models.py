@@ -95,7 +95,8 @@ class Product(models.Model):
     description = models.TextField(blank=True, null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     image = models.CharField(max_length=500, blank=True, null=True)
-    
+    images = models.JSONField(null=True, blank=True, default=None)  # optional list of up to 3 image URLs
+
     # Relationships
     category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE, related_name='products')
     brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name='products')
