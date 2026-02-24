@@ -1182,6 +1182,16 @@ def admin_update_product(request, product_id):
                     'message': f'Product type "{data["product_type"]}" not found'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+        # Normalize optional expiry_date: empty or invalid -> None (YYYY-MM-DD only)
+        if 'expiry_date' in data:
+            val = data['expiry_date']
+            if val is None or (isinstance(val, str) and not val.strip()):
+                data['expiry_date'] = None
+            elif isinstance(val, str) and len(val) == 10 and val[4] == '-' and val[7] == '-':
+                pass  # already YYYY-MM-DD
+            else:
+                data['expiry_date'] = None
+
         serializer = ProductSerializer(product, data=data, partial=True)
         if serializer.is_valid():
             updated_product = serializer.save()
