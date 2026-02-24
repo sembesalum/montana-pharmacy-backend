@@ -42,7 +42,7 @@ class BusinessUserSerializer(serializers.ModelSerializer):
         model = BusinessUser
         fields = [
             'user_id', 'business_type', 'business_name', 'phone_number',
-            'business_location', 'tin_number', 'is_verified', 'created_at'
+            'business_location', 'tin_number', 'is_verified', 'permissions', 'created_at'
         ]
         read_only_fields = ['user_id', 'is_verified', 'created_at']
 

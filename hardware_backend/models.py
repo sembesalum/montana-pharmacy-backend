@@ -19,9 +19,10 @@ class BusinessUser(models.Model):
     tin_number = models.CharField(max_length=50, unique=True)
     password = models.CharField(max_length=128)
     is_verified = models.BooleanField(default=False)
+    permissions = models.JSONField(null=True, blank=True, default=None)  # optional list of permission keys; null = use role defaults
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = "business_users"
     

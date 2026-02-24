@@ -2078,6 +2078,11 @@ def admin_update_user(request, user_id):
             # Treat "active" as verified, others as not verified
             user.is_verified = (str(status_value).lower() == 'active')
 
+        # Update permissions (optional; list of permission keys; null = use role defaults)
+        if 'permissions' in data:
+            perms = data.get('permissions')
+            user.permissions = perms if isinstance(perms, list) else None
+
         user.save()
 
         return Response({
