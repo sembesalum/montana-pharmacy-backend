@@ -1150,6 +1150,37 @@ def admin_update_product(request, product_id):
         if 'image' in data and data['image'] is None:
             del data['image']
 
+        # Convert names to IDs for foreign key fields (same pattern as in admin_create_product)
+        if 'category' in data and data['category']:
+            try:
+                category = ProductCategory.objects.get(name=data['category'])
+                data['category'] = category.category_id
+            except ProductCategory.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Category "{data["category"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        if 'brand' in data and data['brand']:
+            try:
+                brand = Brand.objects.get(name=data['brand'])
+                data['brand'] = brand.brand_id
+            except Brand.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Brand "{data["brand"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        if 'product_type' in data and data['product_type']:
+            try:
+                product_type = ProductType.objects.get(name=data['product_type'])
+                data['product_type'] = product_type.type_id
+            except ProductType.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Product type "{data["product_type"]}" not found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = ProductSerializer(product, data=data, partial=True)
         if serializer.is_valid():
             updated_product = serializer.save()
