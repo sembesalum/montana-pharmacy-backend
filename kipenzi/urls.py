@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from users import views
 from subscription import views as subViews
 
@@ -48,3 +50,5 @@ urlpatterns = [
     # Backwards-compatible hardware API prefix (for clients calling /hardware/...)
     path('hardware/', include('hardware_backend.urls')),
 ]
+if getattr(settings, 'DEBUG', False):
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
