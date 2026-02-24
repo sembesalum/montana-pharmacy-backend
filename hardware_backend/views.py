@@ -1118,7 +1118,8 @@ def admin_update_product(request, product_id):
                 'message': 'Product not found'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        data = request.data.copy()
+        # Build a plain dict so we can set data['images'] to a list (QueryDict only stores strings)
+        data = {k: request.data.get(k) for k in request.data}
         current_images = list(product.images) if product.images else ([product.image] if product.image else [])
         if isinstance(data.get('images'), str):
             try:
@@ -1147,8 +1148,8 @@ def admin_update_product(request, product_id):
                     final_images = [url]
         data['images'] = final_images
         data['image'] = final_images[0] if final_images else None
-        if 'image' in data and data['image'] is None:
-            del data['image']
+        if data.get('image') is None:
+            data.pop('image', None)
 
         # Convert names to IDs for foreign key fields (same pattern as in admin_create_product)
         if 'category' in data and data['category']:
@@ -1190,6 +1191,7 @@ def admin_update_product(request, product_id):
                 'data': ProductSerializer(updated_product).data
             }, status=status.HTTP_200_OK)
         else:
+            print(f"🔍 DEBUG admin_update_product validation errors: {serializer.errors}")
             return Response({
                 'success': False,
                 'message': 'Validation error',
