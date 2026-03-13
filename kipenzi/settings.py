@@ -18,7 +18,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-uwf!$!@qgcx2pol!ycfy(_k8i1!5)txkht2ky%l^()np$su9f^'
 DEBUG = True
-ALLOWED_HOSTS = ['geoclimatz.pythonanywhere.com', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['*']
 
 # PROC CODE START ---------------------------------------------------------------------
 
@@ -74,6 +74,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
+    "dev.admin-montanapharmacy.com",
+    "https://dev.admin-montanapharmacy.com",
+    "https://admin-montanapharmacy.com",
+    "https://www.admin-montanapharmacy.com",
+    "https://www.dev.admin-montanapharmacy.com ",
+    "https://www.admin-montanapharmacy.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -121,12 +127,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'kipenzi.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # DATABASES = {
 #     'default': {
@@ -145,22 +151,22 @@ DATABASES = {
 #     }
 # }
 
-# DATABASES = {
-#         'default': {
-#             'ENGINE': 'django.db.backends.mysql',
-#             'NAME': 'kipenzi',
-#             'USER': 'root',
-#             'PASSWORD': '3102001Prosper', 
-#             'HOST': 'localhost',
-#             'PORT': '3306',
-#             'OPTIONS': {
-#                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-#                 'charset': 'utf8mb4',
-#                 'connect_timeout': 30,
-#             },
-#             'CONN_MAX_AGE': 300,  # 5 minutes (set to 0 if using connection pooling)
-#         }
-#     }
+DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': 'montanaapp',
+            'USER': 'root',
+            'PASSWORD': 'Montana2026', 
+            'HOST': 'localhost',
+            'PORT': '3306',
+            'OPTIONS': {
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                'charset': 'utf8mb4',
+                'connect_timeout': 30,
+            },
+            'CONN_MAX_AGE': 300,  # 5 minutes (set to 0 if using connection pooling)
+        }
+    }
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
