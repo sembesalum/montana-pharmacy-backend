@@ -57,10 +57,10 @@ def send_otp_sms(phone_number, otp, user_info=None):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     user_details = f" | User: {user_info}" if user_info else ""
     
-    print(f"\n{'='*60}")
-    print(f"[{timestamp}] 📱 SMS OTP REQUEST{user_details}")
-    print(f"[{timestamp}] Phone: {phone_number} | OTP: {otp}")
-    print(f"{'='*60}")
+    print(f"\n{'='*60}", flush=True)
+    print(f"[{timestamp}] SMS OTP REQUEST{user_details}", flush=True)
+    print(f"[{timestamp}] Phone: {phone_number} | OTP: {otp}", flush=True)
+    print(f"{'='*60}", flush=True)
     
     # Get SMS configuration from settings
     sms_username = getattr(settings, 'SMS_USERNAME', None)
@@ -68,10 +68,12 @@ def send_otp_sms(phone_number, otp, user_info=None):
     sms_sender = getattr(settings, 'SMS_SENDER', 'YourApp')
     sms_api_url = getattr(settings, 'SMS_API_URL', 'https://mshastra.com/sendsms_api_json.aspx')
     
+    print(f"[{timestamp}] SMS Config - Username: {sms_username}, Sender: {sms_sender}", flush=True)
+    
     # Check if SMS credentials are configured
     if not sms_username or sms_username == 'YOUR_SMS_USERNAME' or not sms_password or sms_password == 'YOUR_SMS_PASSWORD':
-        print(f"[{timestamp}] ⚠️  [DEV MODE] SMS not configured - OTP {otp} for {phone_number}")
-        print(f"{'='*60}\n")
+        print(f"[{timestamp}] [DEV MODE] SMS not configured - OTP {otp} for {phone_number}", flush=True)
+        print(f"{'='*60}\n", flush=True)
         return True
     
     # Prepare phone number (ensure it doesn't have + prefix for SMS API)
@@ -95,34 +97,39 @@ def send_otp_sms(phone_number, otp, user_info=None):
         "accept": "application/json",
     }
     
-    print(f"[{timestamp}] 🚀 Sending SMS via mShastra API...")
-    print(f"[{timestamp}] API URL: {sms_api_url}")
+    print(f"[{timestamp}] Sending SMS via mShastra API...", flush=True)
+    print(f"[{timestamp}] API URL: {sms_api_url}", flush=True)
+    print(f"[{timestamp}] Phone (cleaned): {phone_clean}", flush=True)
+    print(f"[{timestamp}] Message: {message}", flush=True)
     
     try:
         # Send SMS via API
         response = requests.post(sms_api_url, headers=headers, data=payload, timeout=10)
+        print(f"[{timestamp}] HTTP Status Code: {response.status_code}", flush=True)
+        print(f"[{timestamp}] Raw Response: {response.text}", flush=True)
+        
         response.raise_for_status()
         json_response = response.json()
         
-        print(f"[{timestamp}] ✅ SMS SENT SUCCESSFULLY to {phone_number}")
-        print(f"[{timestamp}] API Response: {json_response}")
-        print(f"{'='*60}\n")
+        print(f"[{timestamp}] SMS SENT SUCCESSFULLY to {phone_number}", flush=True)
+        print(f"[{timestamp}] API Response (JSON): {json_response}", flush=True)
+        print(f"{'='*60}\n", flush=True)
         return True
     except requests.exceptions.RequestException as e:
-        print(f"[{timestamp}] ❌ FAILED to send SMS to {phone_number}: {str(e)}")
+        print(f"[{timestamp}] FAILED to send SMS to {phone_number}: {str(e)}", flush=True)
         if settings.DEBUG:
-            print(f"[{timestamp}] ⚠️  [DEV MODE] Fallback - OTP {otp} for {phone_number}")
-            print(f"{'='*60}\n")
+            print(f"[{timestamp}] [DEV MODE] Fallback - OTP {otp} for {phone_number}", flush=True)
+            print(f"{'='*60}\n", flush=True)
             return True
-        print(f"{'='*60}\n")
+        print(f"{'='*60}\n", flush=True)
         return False
     except Exception as e:
-        print(f"[{timestamp}] ❌ ERROR sending SMS: {str(e)}")
+        print(f"[{timestamp}] ERROR sending SMS: {str(e)}", flush=True)
         if settings.DEBUG:
-            print(f"[{timestamp}] ⚠️  [DEV MODE] Fallback - OTP {otp} for {phone_number}")
-            print(f"{'='*60}\n")
+            print(f"[{timestamp}] [DEV MODE] Fallback - OTP {otp} for {phone_number}", flush=True)
+            print(f"{'='*60}\n", flush=True)
             return True
-        print(f"{'='*60}\n")
+        print(f"{'='*60}\n", flush=True)
         return False
 
 def normalize_phone_number(phone_number):
