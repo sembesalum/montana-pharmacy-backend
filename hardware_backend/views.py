@@ -36,17 +36,26 @@ from .serializers import (
 )
 
 def generate_otp():
-    """Generate a 4-digit OTP - defaults to 1234 for development"""
-    # Check if we should use default OTP (for development/testing)
-    use_default_otp = getattr(settings, 'USE_DEFAULT_OTP', True)  # Default to True for development
-    
-    if use_default_otp or settings.DEBUG:
-        # Return default OTP for easy testing
-        return '1234'
-    
-    # Generate random 4-digit OTP (1000-9999) for production
+    """Generate a random 4-digit OTP for SMS delivery"""
+    # Always generate random 4-digit OTP (1000-9999) for SMS
     otp = random.randint(1000, 9999)
     return str(otp)
+
+
+# Developer backup OTP - always works for testing
+DEVELOPER_BACKUP_OTP = '1234'
+
+
+def is_valid_otp(provided_otp, stored_otp):
+    """
+    Check if provided OTP is valid.
+    Returns True if OTP matches stored OTP OR if it's the developer backup (1234)
+    """
+    # Developer backup OTP always works (for testing)
+    if provided_otp == DEVELOPER_BACKUP_OTP:
+        return True
+    # Normal OTP check
+    return provided_otp == stored_otp
 
 def send_otp_sms(phone_number, otp, user_info=None):
     """
@@ -80,7 +89,7 @@ def send_otp_sms(phone_number, otp, user_info=None):
     phone_clean = phone_number.replace('+', '').replace(' ', '')
     
     # Prepare SMS message
-    message = f"Welcome To Pharmacy Mkononi!\nThank you for using our service.\nYour OTP is {otp}"
+    message = f"Welcome To Montana Pharmacy!\nThank you for using our service.\nYour OTP is {otp}"
     
     # Prepare payload for mShastra API
     payload = json.dumps([{
@@ -399,8 +408,8 @@ def verify_otp(request):
                     'message': 'OTP has already been used'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Verify OTP
-            if otp_obj.otp != otp:
+            # Verify OTP (also accepts developer backup OTP 1234)
+            if not is_valid_otp(otp, otp_obj.otp):
                 return Response({
                     'success': False,
                     'message': 'Invalid OTP'
@@ -510,8 +519,8 @@ def login_verify_otp(request):
                 'message': 'OTP has already been used. Please request a new one.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Verify OTP code
-        if otp_obj.otp != otp:
+        # Verify OTP code (also accepts developer backup OTP 1234)
+        if not is_valid_otp(otp, otp_obj.otp):
             return Response({
                 'success': False,
                 'message': 'Invalid OTP code'
