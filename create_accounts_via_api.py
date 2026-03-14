@@ -146,10 +146,10 @@ def create_test_accounts_via_api():
         {
             'phone_number': '+255616107670',
             'password': 'manager@123',
-            'business_name': 'Demo Manager Pharmacy',
-            'business_location': 'Dodoma, Tanzania',
+            'business_name': 'Montana Pharmacy Manager',
+            'business_location': 'Dar es Salaam, Tanzania',
             'business_type': 'pharmacy',
-            'tin_number': '444987654',
+            'tin_number': '616107670',
             'role': 'MANAGER'
         },
         {

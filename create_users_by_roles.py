@@ -57,12 +57,12 @@ def create_users_by_roles():
             'frontend_role': 'RECEIVER',
         },
         {
-            'phone_number': '+255444987654',
+            'phone_number': '+255616107670',
             'password': 'manager@123',
-            'business_name': 'Demo Manager Pharmacy',
-            'business_location': 'Dodoma, Tanzania',
+            'business_name': 'Montana Pharmacy Manager',
+            'business_location': 'Dar es Salaam, Tanzania',
             'business_type': 'pharmacy',  # Maps to MANAGER
-            'tin_number': '444987654',
+            'tin_number': '616107670',
             'is_verified': True,
             'frontend_role': 'MANAGER',
         },
