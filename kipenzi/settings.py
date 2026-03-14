@@ -155,7 +155,7 @@ DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
             'NAME': 'montanaapp',
-            'USER': 'root',
+            'USER': 'montanauser',
             'PASSWORD': 'Montana2026', 
             'HOST': 'localhost',
             'PORT': '3306',
