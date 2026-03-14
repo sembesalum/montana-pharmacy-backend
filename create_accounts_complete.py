@@ -9,7 +9,7 @@ import json
 import time
 
 # Production API configuration
-API_BASE_URL = "https://geoclimatz.pythonanywhere.com/v1/hardware"
+API_BASE_URL = "https://dev.admin-montanapharmacy.com/v1/hardware"
 
 def test_api_health():
     """Test if the API is healthy and accessible"""

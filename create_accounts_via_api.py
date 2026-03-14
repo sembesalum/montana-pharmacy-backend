@@ -10,7 +10,7 @@ import json
 import time
 
 # Production API configuration
-API_BASE_URL = "https://geoclimatz.pythonanywhere.com/v1/hardware"
+API_BASE_URL = "https://dev.admin-montanapharmacy.com/v1/hardware"
 
 # Mapping of old phone numbers to new phone numbers for updates
 # Format: {'role': {'old_phone': 'new_phone'}}

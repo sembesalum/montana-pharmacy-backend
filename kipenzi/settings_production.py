@@ -14,7 +14,7 @@ SECRET_KEY = 'django-insecure-uwf!$!@qgcx2pol!ycfy(_k8i1!5)txkht2ky%l^()np$su9f^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['geoclimatz.pythonanywhere.com', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['dev.admin-montanapharmacy.com', 'admin-montanapharmacy.com', '127.0.0.1', 'localhost']
 
 # Application definition
 INSTALLED_APPS = [

@@ -7,7 +7,7 @@ import requests
 import json
 
 # Production API configuration
-API_BASE_URL = "https://geoclimatz.pythonanywhere.com/v1/hardware"
+API_BASE_URL = "https://dev.admin-montanapharmacy.com/v1/hardware"
 
 def test_endpoints():
     """Test various API endpoints to find the correct ones"""

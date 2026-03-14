@@ -22,7 +22,7 @@ from hardware_backend.views import normalize_phone_number
 from django.contrib.auth.hashers import make_password
 
 # API configuration
-API_BASE_URL = os.getenv('API_BASE_URL', 'https://geoclimatz.pythonanywhere.com/v1/hardware')
+API_BASE_URL = os.getenv('API_BASE_URL', 'https://dev.admin-montanapharmacy.com/v1/hardware')
 # For local testing, use: 'http://localhost:8000/v1/hardware'
 
 def test_login_api(phone_number, password, description=""):
