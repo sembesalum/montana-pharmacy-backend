@@ -48,11 +48,20 @@ def generate_otp():
     otp = random.randint(1000, 9999)
     return str(otp)
 
-def send_otp_sms(phone_number, otp):
+def send_otp_sms(phone_number, otp, user_info=None):
     """
     Send OTP via SMS using mShastra API
     Falls back to console print in development if SMS credentials are not configured
     """
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    user_details = f" | User: {user_info}" if user_info else ""
+    
+    print(f"\n{'='*60}")
+    print(f"[{timestamp}] 📱 SMS OTP REQUEST{user_details}")
+    print(f"[{timestamp}] Phone: {phone_number} | OTP: {otp}")
+    print(f"{'='*60}")
+    
     # Get SMS configuration from settings
     sms_username = getattr(settings, 'SMS_USERNAME', None)
     sms_password = getattr(settings, 'SMS_PASSWORD', None)
@@ -61,8 +70,8 @@ def send_otp_sms(phone_number, otp):
     
     # Check if SMS credentials are configured
     if not sms_username or sms_username == 'YOUR_SMS_USERNAME' or not sms_password or sms_password == 'YOUR_SMS_PASSWORD':
-        # Fallback to console print in development
-        print(f"[DEV MODE] OTP {otp} for {phone_number} (SMS not configured)")
+        print(f"[{timestamp}] ⚠️  [DEV MODE] SMS not configured - OTP {otp} for {phone_number}")
+        print(f"{'='*60}\n")
         return True
     
     # Prepare phone number (ensure it doesn't have + prefix for SMS API)
@@ -86,28 +95,34 @@ def send_otp_sms(phone_number, otp):
         "accept": "application/json",
     }
     
+    print(f"[{timestamp}] 🚀 Sending SMS via mShastra API...")
+    print(f"[{timestamp}] API URL: {sms_api_url}")
+    
     try:
         # Send SMS via API
         response = requests.post(sms_api_url, headers=headers, data=payload, timeout=10)
         response.raise_for_status()
         json_response = response.json()
         
-        # Check if SMS was sent successfully
-        # mShastra API typically returns success status in response
-        print(f"SMS sent successfully to {phone_number}: {json_response}")
+        print(f"[{timestamp}] ✅ SMS SENT SUCCESSFULLY to {phone_number}")
+        print(f"[{timestamp}] API Response: {json_response}")
+        print(f"{'='*60}\n")
         return True
     except requests.exceptions.RequestException as e:
-        # Log error but don't fail - fallback to console in development
-        print(f"Failed to send SMS to {phone_number}: {str(e)}")
+        print(f"[{timestamp}] ❌ FAILED to send SMS to {phone_number}: {str(e)}")
         if settings.DEBUG:
-            print(f"[DEV MODE] OTP {otp} for {phone_number}")
+            print(f"[{timestamp}] ⚠️  [DEV MODE] Fallback - OTP {otp} for {phone_number}")
+            print(f"{'='*60}\n")
             return True
+        print(f"{'='*60}\n")
         return False
     except Exception as e:
-        print(f"Error sending SMS: {str(e)}")
+        print(f"[{timestamp}] ❌ ERROR sending SMS: {str(e)}")
         if settings.DEBUG:
-            print(f"[DEV MODE] OTP {otp} for {phone_number}")
+            print(f"[{timestamp}] ⚠️  [DEV MODE] Fallback - OTP {otp} for {phone_number}")
+            print(f"{'='*60}\n")
             return True
+        print(f"{'='*60}\n")
         return False
 
 def normalize_phone_number(phone_number):
@@ -179,7 +194,8 @@ def register_business_user(request):
             )
             
             # Send OTP via SMS
-            send_otp_sms(normalized_phone, otp)
+            user_info = f"{user.business_name} ({user.business_type}) - NEW REGISTRATION"
+            send_otp_sms(normalized_phone, otp, user_info)
             
             return Response({
                 'success': True,
@@ -321,7 +337,8 @@ def login_business_user(request):
             )
             
             # Send OTP via SMS
-            send_otp_sms(otp_phone, otp)
+            user_info = f"{user.business_name} ({user.business_type}) - ADMIN LOGIN"
+            send_otp_sms(otp_phone, otp, user_info)
             
             # Return response indicating OTP is required (user is already approved at this point)
             return Response({
@@ -620,7 +637,8 @@ def resend_otp(request):
         )
         
         # Send OTP via SMS
-        send_otp_sms(otp_phone, otp)
+        user_info = f"{user.business_name} ({user.business_type}) - RESEND OTP"
+        send_otp_sms(otp_phone, otp, user_info)
         
         return Response({
             'success': True,
