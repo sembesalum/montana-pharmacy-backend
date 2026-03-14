@@ -134,6 +134,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_featured', 'stock_quantity', 'minimum_stock', 'expiry_date', 'batches', 'created_at'
         ]
         read_only_fields = ['product_id', 'created_at']
+        extra_kwargs = {
+            'description': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
 
 class BannerSerializer(serializers.ModelSerializer):
     """Serializer for banners"""

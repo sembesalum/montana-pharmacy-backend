@@ -57,12 +57,12 @@ def create_users_by_roles():
             'frontend_role': 'RECEIVER',
         },
         {
-            'phone_number': '+255616107670',
-            'password': 'manager@123',
-            'business_name': 'Montana Pharmacy Manager',
+            'phone_number': '+255743147534',
+            'password': 'montana()main',
+            'business_name': 'Shayo Montana',
             'business_location': 'Dar es Salaam, Tanzania',
             'business_type': 'pharmacy',  # Maps to MANAGER
-            'tin_number': '616107670',
+            'tin_number': '743147534',
             'is_verified': True,
             'frontend_role': 'MANAGER',
         },
